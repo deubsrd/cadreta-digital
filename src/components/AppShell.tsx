@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
-import { LayoutDashboard, Users, ShoppingBag, FileText, Settings, LogOut, Shield, Menu } from "lucide-react";
+import { LayoutDashboard, Users, ShoppingBag, FileText, Settings, LogOut, Shield, Menu, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/militares", label: "Militares", icon: Users },
+  { to: "/itens", label: "Itens", icon: Package },
   { to: "/compras", label: "Compras", icon: ShoppingBag },
   { to: "/faturas", label: "Faturas", icon: FileText },
   { to: "/configuracoes", label: "Configurações", icon: Settings },

@@ -40,7 +40,7 @@ function FaturasPage() {
 
   const faturas = useMemo(() => {
     const map = new Map<string, { total: number; itens: string[] }>();
-    compras.forEach((c) => {
+    compras.filter((c) => !c.pago_na_hora).forEach((c) => {
       const cur = map.get(c.militar_id) ?? { total: 0, itens: [] };
       cur.total += Number(c.valor);
       cur.itens.push(`${new Date(c.data_compra + "T00:00").toLocaleDateString("pt-BR")} — ${c.itens} (${brl(Number(c.valor))})`);

@@ -20,8 +20,65 @@ export type Compra = {
   valor: number;
   observacoes: string | null;
   created_at: string;
+  item_id: string | null;
+  quantidade: number;
+  pago_na_hora: boolean;
   militares?: Pick<Militar, "id" | "nome_guerra" | "posto" | "telefone"> | null;
 };
+
+export type Item = {
+  id: string;
+  nome: string;
+  categoria: string | null;
+  preco_avista: number;
+  preco_fiado: number;
+  ativo: boolean;
+  observacoes: string | null;
+  created_at: string;
+};
+
+export type ItemPriceHistory = {
+  id: string;
+  item_id: string;
+  preco_avista: number;
+  preco_fiado: number;
+  changed_at: string;
+};
+
+export async function listItens() {
+  const { data, error } = await supabase.from("itens").select("*").order("nome");
+  if (error) throw error;
+  return data as Item[];
+}
+
+export async function upsertItem(i: Partial<Item> & { nome: string; preco_avista: number; preco_fiado: number }) {
+  const payload = {
+    nome: i.nome,
+    categoria: i.categoria ?? null,
+    preco_avista: i.preco_avista,
+    preco_fiado: i.preco_fiado,
+    ativo: i.ativo ?? true,
+    observacoes: i.observacoes ?? null,
+  };
+  if (i.id) {
+    const { error } = await supabase.from("itens").update(payload).eq("id", i.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("itens").insert(payload);
+    if (error) throw error;
+  }
+}
+
+export async function deleteItem(id: string) {
+  const { error } = await supabase.from("itens").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function listItemPriceHistory(item_id: string) {
+  const { data, error } = await supabase.from("item_price_history").select("*").eq("item_id", item_id).order("changed_at", { ascending: false });
+  if (error) throw error;
+  return data as ItemPriceHistory[];
+}
 
 export type Pagamento = {
   id: string;
@@ -85,12 +142,18 @@ export async function listCompras(opts?: { from?: string; to?: string }) {
   return data as unknown as Compra[];
 }
 
-export async function createCompra(c: { militar_id: string; data_compra: string; itens: string; valor: number; observacoes?: string | null }) {
+export async function createCompra(c: { militar_id: string; data_compra: string; itens: string; valor: number; observacoes?: string | null; item_id?: string | null; quantidade?: number; pago_na_hora?: boolean }) {
   const { error } = await supabase.from("compras").insert(c);
   if (error) throw error;
 }
 
-export async function updateCompra(id: string, c: { militar_id?: string; data_compra?: string; itens?: string; valor?: number; observacoes?: string | null }) {
+export async function createComprasBulk(rows: { militar_id: string; data_compra: string; itens: string; valor: number; observacoes?: string | null; item_id?: string | null; quantidade?: number; pago_na_hora?: boolean }[]) {
+  if (!rows.length) return;
+  const { error } = await supabase.from("compras").insert(rows);
+  if (error) throw error;
+}
+
+export async function updateCompra(id: string, c: { militar_id?: string; data_compra?: string; itens?: string; valor?: number; observacoes?: string | null; item_id?: string | null; quantidade?: number; pago_na_hora?: boolean }) {
   const { error } = await supabase.from("compras").update(c).eq("id", id);
   if (error) throw error;
 }

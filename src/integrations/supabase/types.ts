@@ -19,9 +19,12 @@ export type Database = {
           created_at: string
           data_compra: string
           id: string
+          item_id: string | null
           itens: string
           militar_id: string
           observacoes: string | null
+          pago_na_hora: boolean
+          quantidade: number
           updated_at: string
           valor: number
         }
@@ -29,9 +32,12 @@ export type Database = {
           created_at?: string
           data_compra?: string
           id?: string
+          item_id?: string | null
           itens: string
           militar_id: string
           observacoes?: string | null
+          pago_na_hora?: boolean
+          quantidade?: number
           updated_at?: string
           valor: number
         }
@@ -39,13 +45,23 @@ export type Database = {
           created_at?: string
           data_compra?: string
           id?: string
+          item_id?: string | null
           itens?: string
           militar_id?: string
           observacoes?: string | null
+          pago_na_hora?: boolean
+          quantidade?: number
           updated_at?: string
           valor?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "compras_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "itens"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "compras_militar_id_fkey"
             columns: ["militar_id"]
@@ -94,6 +110,74 @@ export type Database = {
           z_api_client_token?: string | null
           z_api_instance?: string | null
           z_api_token?: string | null
+        }
+        Relationships: []
+      }
+      item_price_history: {
+        Row: {
+          changed_at: string
+          id: string
+          item_id: string
+          preco_avista: number
+          preco_fiado: number
+        }
+        Insert: {
+          changed_at?: string
+          id?: string
+          item_id: string
+          preco_avista: number
+          preco_fiado: number
+        }
+        Update: {
+          changed_at?: string
+          id?: string
+          item_id?: string
+          preco_avista?: number
+          preco_fiado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_price_history_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "itens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      itens: {
+        Row: {
+          ativo: boolean
+          categoria: string | null
+          created_at: string
+          id: string
+          nome: string
+          observacoes: string | null
+          preco_avista: number
+          preco_fiado: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          categoria?: string | null
+          created_at?: string
+          id?: string
+          nome: string
+          observacoes?: string | null
+          preco_avista?: number
+          preco_fiado?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string | null
+          created_at?: string
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          preco_avista?: number
+          preco_fiado?: number
+          updated_at?: string
         }
         Relationships: []
       }
