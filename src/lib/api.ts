@@ -142,12 +142,18 @@ export async function listCompras(opts?: { from?: string; to?: string }) {
   return data as unknown as Compra[];
 }
 
-export async function createCompra(c: { militar_id: string; data_compra: string; itens: string; valor: number; observacoes?: string | null }) {
+export async function createCompra(c: { militar_id: string; data_compra: string; itens: string; valor: number; observacoes?: string | null; item_id?: string | null; quantidade?: number; pago_na_hora?: boolean }) {
   const { error } = await supabase.from("compras").insert(c);
   if (error) throw error;
 }
 
-export async function updateCompra(id: string, c: { militar_id?: string; data_compra?: string; itens?: string; valor?: number; observacoes?: string | null }) {
+export async function createComprasBulk(rows: { militar_id: string; data_compra: string; itens: string; valor: number; observacoes?: string | null; item_id?: string | null; quantidade?: number; pago_na_hora?: boolean }[]) {
+  if (!rows.length) return;
+  const { error } = await supabase.from("compras").insert(rows);
+  if (error) throw error;
+}
+
+export async function updateCompra(id: string, c: { militar_id?: string; data_compra?: string; itens?: string; valor?: number; observacoes?: string | null; item_id?: string | null; quantidade?: number; pago_na_hora?: boolean }) {
   const { error } = await supabase.from("compras").update(c).eq("id", id);
   if (error) throw error;
 }
