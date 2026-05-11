@@ -14,10 +14,34 @@ export const Route = createFileRoute("/_app/")({
 });
 
 function Dashboard() {
+  const qc = useQueryClient();
   const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares });
   const { data: compras = [] } = useQuery({ queryKey: ["compras"], queryFn: () => listCompras() });
   const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos });
   const { data: itens = [] } = useQuery({ queryKey: ["itens"], queryFn: listItens });
+  const { data: pixList = [] } = useQuery({ queryKey: ["pix_cobrancas"], queryFn: listPixCobrancas });
+
+  useEffect(() => {
+    const ch = supabase.channel("dash_pix")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pix_cobrancas" }, () => {
+        qc.invalidateQueries({ queryKey: ["pix_cobrancas"] });
+        qc.invalidateQueries({ queryKey: ["pagamentos"] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [qc]);
+
+  const pixStats = useMemo(() => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayIso = today.toISOString();
+    const recebidosHoje = pixList.filter((p) => p.status === "paid" && p.paid_at && p.paid_at >= todayIso);
+    const totalHoje = recebidosHoje.reduce((s, p) => s + Number(p.paid_amount ?? p.valor), 0);
+    const ultimosPagos = pixList.filter((p) => p.status === "paid").slice(0, 5);
+    const aguardando = pixList.filter((p) => p.status === "pending").length;
+    const revisao = pixList.filter((p) => p.needs_review).length;
+    return { recebidosHoje: recebidosHoje.length, totalHoje, ultimosPagos, aguardando, revisao };
+  }, [pixList]);
+
 
   const stats = useMemo(() => {
     const start = startOfMonth();
