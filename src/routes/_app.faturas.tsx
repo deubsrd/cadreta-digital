@@ -223,7 +223,13 @@ function FaturasPage() {
                   <img src={`data:image/png;base64,${pixDialog.pix.qr_code_base64}`} alt="QR Code PIX" className="w-56 h-56 rounded border" />
                 </div>
               )}
-              {pixDialog.pix.copia_cola && (
+              {pixDialog.pix.ticket_url && (
+                <Button size="sm" variant="outline" className="w-full" asChild>
+                  <a href={pixDialog.pix.ticket_url} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-1" />Abrir página de pagamento
+                  </a>
+                </Button>
+              )}
                 <div className="space-y-2">
                   <div className="text-xs font-medium uppercase text-muted-foreground">Copia e Cola</div>
                   <div className="text-xs bg-muted p-2 rounded break-all max-h-24 overflow-auto">{pixDialog.pix.copia_cola}</div>
