@@ -39,6 +39,7 @@ export type Configuracoes = {
   z_api_instance: string;
   z_api_token: string;
   z_api_client_token: string;
+  proxima_cobranca: string | null;
 };
 
 export async function listMilitares() {
