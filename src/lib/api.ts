@@ -80,7 +80,7 @@ export async function createCompra(c: { militar_id: string; data_compra: string;
   if (error) throw error;
 }
 
-export async function updateCompra(id: string, c: Partial<Compra>) {
+export async function updateCompra(id: string, c: { militar_id?: string; data_compra?: string; itens?: string; valor?: number; observacoes?: string | null }) {
   const { error } = await supabase.from("compras").update(c).eq("id", id);
   if (error) throw error;
 }
