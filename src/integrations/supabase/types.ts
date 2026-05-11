@@ -14,7 +14,154 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      compras: {
+        Row: {
+          created_at: string
+          data_compra: string
+          id: string
+          itens: string
+          militar_id: string
+          observacoes: string | null
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          created_at?: string
+          data_compra?: string
+          id?: string
+          itens: string
+          militar_id: string
+          observacoes?: string | null
+          updated_at?: string
+          valor: number
+        }
+        Update: {
+          created_at?: string
+          data_compra?: string
+          id?: string
+          itens?: string
+          militar_id?: string
+          observacoes?: string | null
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compras_militar_id_fkey"
+            columns: ["militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      configuracoes: {
+        Row: {
+          frequencia_cobranca_dias: number
+          horario_cobranca: string
+          id: number
+          mensagem_template: string | null
+          pix_key: string | null
+          pix_nome: string | null
+          updated_at: string
+          z_api_client_token: string | null
+          z_api_instance: string | null
+          z_api_token: string | null
+        }
+        Insert: {
+          frequencia_cobranca_dias?: number
+          horario_cobranca?: string
+          id?: number
+          mensagem_template?: string | null
+          pix_key?: string | null
+          pix_nome?: string | null
+          updated_at?: string
+          z_api_client_token?: string | null
+          z_api_instance?: string | null
+          z_api_token?: string | null
+        }
+        Update: {
+          frequencia_cobranca_dias?: number
+          horario_cobranca?: string
+          id?: number
+          mensagem_template?: string | null
+          pix_key?: string | null
+          pix_nome?: string | null
+          updated_at?: string
+          z_api_client_token?: string | null
+          z_api_instance?: string | null
+          z_api_token?: string | null
+        }
+        Relationships: []
+      }
+      militares: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          identificacao: string
+          nome: string
+          telefone: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          identificacao: string
+          nome: string
+          telefone: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          identificacao?: string
+          nome?: string
+          telefone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pagamentos: {
+        Row: {
+          created_at: string
+          id: string
+          militar_id: string
+          observacoes: string | null
+          pago_em: string
+          periodo: string
+          valor: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          militar_id: string
+          observacoes?: string | null
+          pago_em?: string
+          periodo: string
+          valor: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          militar_id?: string
+          observacoes?: string | null
+          pago_em?: string
+          periodo?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pagamentos_militar_id_fkey"
+            columns: ["militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
