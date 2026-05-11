@@ -53,7 +53,7 @@ Deno.serve(async (req: Request) => {
         description: descricao || `Fatura ${periodoLabel} - ${nome}`,
         payment_method_id: "pix",
         external_reference: txid,
-        payer: { email: `militar-${militar_id.slice(0, 8)}@cadernetadigital.app`, first_name: nome },
+        payer: { email: "cobranca@cadretadigital.com.br", first_name: nome },
         notification_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/mp-webhook`,
       }),
     });
