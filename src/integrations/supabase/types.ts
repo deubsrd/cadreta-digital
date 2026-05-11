@@ -63,6 +63,7 @@ export type Database = {
           mensagem_template: string | null
           pix_key: string | null
           pix_nome: string | null
+          proxima_cobranca: string | null
           updated_at: string
           z_api_client_token: string | null
           z_api_instance: string | null
@@ -75,6 +76,7 @@ export type Database = {
           mensagem_template?: string | null
           pix_key?: string | null
           pix_nome?: string | null
+          proxima_cobranca?: string | null
           updated_at?: string
           z_api_client_token?: string | null
           z_api_instance?: string | null
@@ -87,6 +89,7 @@ export type Database = {
           mensagem_template?: string | null
           pix_key?: string | null
           pix_nome?: string | null
+          proxima_cobranca?: string | null
           updated_at?: string
           z_api_client_token?: string | null
           z_api_instance?: string | null
