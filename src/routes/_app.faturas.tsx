@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig } from "@/lib/api";
+import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel } from "@/lib/api";
 import { brl, ymd, startOfMonth, endOfMonth, monthLabel, onlyDigits } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ function FaturasPage() {
       const militar = militares.find((m) => m.id === militar_id);
       const pago = pagamentos.find((p) => p.militar_id === militar_id && p.periodo === range.periodo);
       return { militar_id, militar, total: v.total, itens: v.itens, pago };
-    }).sort((a, b) => (a.militar?.nome ?? "").localeCompare(b.militar?.nome ?? ""));
+    }).sort((a, b) => (a.militar?.nome_guerra ?? "").localeCompare(b.militar?.nome_guerra ?? ""));
   }, [compras, pagamentos, militares, range.periodo]);
 
   const filtered = faturas.filter((f) => filter === "todos" ? true : filter === "pagos" ? !!f.pago : !f.pago);
@@ -58,7 +58,7 @@ function FaturasPage() {
   const enviarWhats = async (f: typeof faturas[number]) => {
     if (!config) return;
     const msg = buildMessage(config.mensagem_template, {
-      nome: f.militar?.nome ?? "",
+      nome: militarLabel(f.militar),
       mes: monthLabel(range.date),
       valor: brl(f.total).replace("R$\u00a0", ""),
       resumo: f.itens.join("\n"),
@@ -87,8 +87,8 @@ function FaturasPage() {
     doc.setFontSize(14); doc.text(`Faturas — ${monthLabel(range.date)}`, 14, 16);
     autoTable(doc, {
       startY: 22,
-      head: [["Militar", "Identificação", "Total", "Status"]],
-      body: filtered.map((f) => [f.militar?.nome ?? "", f.militar?.identificacao ?? "", brl(f.total), f.pago ? "Pago" : "Pendente"]),
+      head: [["Posto/Grad", "Nome de guerra", "Total", "Status"]],
+      body: filtered.map((f) => [f.militar?.posto ?? "", f.militar?.nome_guerra ?? "", brl(f.total), f.pago ? "Pago" : "Pendente"]),
     });
     doc.save(`faturas-${mes}.pdf`);
   };
@@ -129,10 +129,10 @@ function FaturasPage() {
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-semibold">{f.militar?.nome}</h3>
+                  <h3 className="font-semibold">{militarLabel(f.militar)}</h3>
                   {f.pago ? <Badge className="bg-success text-success-foreground">Pago</Badge> : <Badge variant="destructive">Pendente</Badge>}
                 </div>
-                <div className="text-xs text-muted-foreground">{f.militar?.identificacao} · {f.militar?.telefone}</div>
+                <div className="text-xs text-muted-foreground">{f.militar?.telefone}</div>
                 <details className="mt-2 text-sm">
                   <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Ver {f.itens.length} compra(s)</summary>
                   <ul className="mt-2 space-y-1 text-muted-foreground">{f.itens.map((i, idx) => <li key={idx}>• {i}</li>)}</ul>

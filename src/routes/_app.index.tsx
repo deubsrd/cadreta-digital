@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { listCompras, listPagamentos, listMilitares } from "@/lib/api";
+import { listCompras, listPagamentos, listMilitares, militarLabel } from "@/lib/api";
 import { brl, monthLabel, startOfMonth, ymd } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { TrendingUp, Users, AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -121,8 +121,8 @@ function Dashboard() {
                 <div className="flex items-center gap-3">
                   <span className="h-7 w-7 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-semibold">{i + 1}</span>
                   <div>
-                    <div className="font-medium">{r.militar?.nome ?? "—"}</div>
-                    <div className="text-xs text-muted-foreground">{r.militar?.identificacao}</div>
+                    <div className="font-medium">{militarLabel(r.militar)}</div>
+                    <div className="text-xs text-muted-foreground">{r.militar?.telefone}</div>
                   </div>
                 </div>
                 <div className="font-semibold text-destructive">{brl(r.val)}</div>
