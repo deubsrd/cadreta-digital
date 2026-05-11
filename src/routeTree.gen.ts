@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppMilitaresRouteImport } from './routes/_app.militares'
+import { Route as AppItensRouteImport } from './routes/_app.itens'
 import { Route as AppFaturasRouteImport } from './routes/_app.faturas'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app.configuracoes'
 import { Route as AppComprasRouteImport } from './routes/_app.compras'
@@ -34,6 +35,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppMilitaresRoute = AppMilitaresRouteImport.update({
   id: '/militares',
   path: '/militares',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppItensRoute = AppItensRouteImport.update({
+  id: '/itens',
+  path: '/itens',
   getParentRoute: () => AppRoute,
 } as any)
 const AppFaturasRoute = AppFaturasRouteImport.update({
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/compras': typeof AppComprasRoute
   '/configuracoes': typeof AppConfiguracoesRoute
   '/faturas': typeof AppFaturasRoute
+  '/itens': typeof AppItensRoute
   '/militares': typeof AppMilitaresRoute
 }
 export interface FileRoutesByTo {
@@ -65,6 +72,7 @@ export interface FileRoutesByTo {
   '/compras': typeof AppComprasRoute
   '/configuracoes': typeof AppConfiguracoesRoute
   '/faturas': typeof AppFaturasRoute
+  '/itens': typeof AppItensRoute
   '/militares': typeof AppMilitaresRoute
   '/': typeof AppIndexRoute
 }
@@ -75,6 +83,7 @@ export interface FileRoutesById {
   '/_app/compras': typeof AppComprasRoute
   '/_app/configuracoes': typeof AppConfiguracoesRoute
   '/_app/faturas': typeof AppFaturasRoute
+  '/_app/itens': typeof AppItensRoute
   '/_app/militares': typeof AppMilitaresRoute
   '/_app/': typeof AppIndexRoute
 }
@@ -86,9 +95,17 @@ export interface FileRouteTypes {
     | '/compras'
     | '/configuracoes'
     | '/faturas'
+    | '/itens'
     | '/militares'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/compras' | '/configuracoes' | '/faturas' | '/militares' | '/'
+  to:
+    | '/login'
+    | '/compras'
+    | '/configuracoes'
+    | '/faturas'
+    | '/itens'
+    | '/militares'
+    | '/'
   id:
     | '__root__'
     | '/_app'
@@ -96,6 +113,7 @@ export interface FileRouteTypes {
     | '/_app/compras'
     | '/_app/configuracoes'
     | '/_app/faturas'
+    | '/_app/itens'
     | '/_app/militares'
     | '/_app/'
   fileRoutesById: FileRoutesById
@@ -135,6 +153,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppMilitaresRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/itens': {
+      id: '/_app/itens'
+      path: '/itens'
+      fullPath: '/itens'
+      preLoaderRoute: typeof AppItensRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/faturas': {
       id: '/_app/faturas'
       path: '/faturas'
@@ -163,6 +188,7 @@ interface AppRouteChildren {
   AppComprasRoute: typeof AppComprasRoute
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
   AppFaturasRoute: typeof AppFaturasRoute
+  AppItensRoute: typeof AppItensRoute
   AppMilitaresRoute: typeof AppMilitaresRoute
   AppIndexRoute: typeof AppIndexRoute
 }
@@ -171,6 +197,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppComprasRoute: AppComprasRoute,
   AppConfiguracoesRoute: AppConfiguracoesRoute,
   AppFaturasRoute: AppFaturasRoute,
+  AppItensRoute: AppItensRoute,
   AppMilitaresRoute: AppMilitaresRoute,
   AppIndexRoute: AppIndexRoute,
 }
@@ -184,3 +211,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
