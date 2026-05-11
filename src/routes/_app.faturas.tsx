@@ -232,11 +232,6 @@ function FaturasPage() {
                   }}><Copy className="h-4 w-4 mr-1" />Copiar código PIX</Button>
                 </div>
               )}
-              {pixDialog.pix.ticket_url && (
-                <Button asChild size="sm" variant="secondary" className="w-full">
-                  <a href={pixDialog.pix.ticket_url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4 mr-1" />Abrir página de pagamento</a>
-                </Button>
-              )}
               <div className="text-xs text-muted-foreground text-center">
                 TXID: <code>{pixDialog.pix.txid}</code><br />
                 Status: <strong>{pixDialog.pix.status}</strong> · Confirmação automática
