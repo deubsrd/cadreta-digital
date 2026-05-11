@@ -229,7 +229,7 @@ function FaturasPage() {
                     <ExternalLink className="h-4 w-4 mr-1" />Abrir página de pagamento
                   </a>
                 </Button>
-              )}
+              {pixDialog.pix.copia_cola && (
                 <div className="space-y-2">
                   <div className="text-xs font-medium uppercase text-muted-foreground">Copia e Cola</div>
                   <div className="text-xs bg-muted p-2 rounded break-all max-h-24 overflow-auto">{pixDialog.pix.copia_cola}</div>
