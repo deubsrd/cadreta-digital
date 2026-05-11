@@ -61,6 +61,41 @@ function ConfigPage() {
             <div><Label>Frequência (dias entre lembretes)</Label><Input type="number" min={1} value={form.frequencia_cobranca_dias} onChange={(e) => set("frequencia_cobranca_dias", Number(e.target.value))} /></div>
             <div><Label>Horário das mensagens</Label><Input type="time" value={form.horario_cobranca?.slice(0,5) ?? "09:00"} onChange={(e) => set("horario_cobranca", e.target.value)} /></div>
           </div>
+          <div className="flex flex-col gap-2">
+            <Label>Próxima cobrança</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn("w-full md:w-[280px] justify-start text-left font-normal", !form.proxima_cobranca && "text-muted-foreground")}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {form.proxima_cobranca
+                    ? new Date(form.proxima_cobranca + "T00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+                    : "Selecionar data"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={form.proxima_cobranca ? new Date(form.proxima_cobranca + "T00:00") : undefined}
+                  onSelect={(d) => {
+                    if (!d) { set("proxima_cobranca", null); return; }
+                    const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+                    set("proxima_cobranca", `${y}-${m}-${day}`);
+                  }}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+            {form.proxima_cobranca && (
+              <button type="button" className="text-xs text-muted-foreground hover:text-foreground self-start" onClick={() => set("proxima_cobranca", null)}>
+                Limpar data
+              </button>
+            )}
+          </div>
         </Card>
 
         <Card className="p-5 space-y-4">
