@@ -77,6 +77,7 @@ export type Database = {
           horario_cobranca: string
           id: number
           mensagem_template: string | null
+          mp_access_token: string | null
           pix_key: string | null
           pix_nome: string | null
           proxima_cobranca: string | null
@@ -90,6 +91,7 @@ export type Database = {
           horario_cobranca?: string
           id?: number
           mensagem_template?: string | null
+          mp_access_token?: string | null
           pix_key?: string | null
           pix_nome?: string | null
           proxima_cobranca?: string | null
@@ -103,6 +105,7 @@ export type Database = {
           horario_cobranca?: string
           id?: number
           mensagem_template?: string | null
+          mp_access_token?: string | null
           pix_key?: string | null
           pix_nome?: string | null
           proxima_cobranca?: string | null
@@ -248,6 +251,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pix_cobrancas: {
+        Row: {
+          copia_cola: string | null
+          created_at: string
+          id: string
+          militar_id: string
+          mp_payment_id: string | null
+          needs_review: boolean
+          paid_amount: number | null
+          paid_at: string | null
+          periodo: string
+          qr_code_base64: string | null
+          raw: Json | null
+          status: string
+          ticket_url: string | null
+          txid: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          copia_cola?: string | null
+          created_at?: string
+          id?: string
+          militar_id: string
+          mp_payment_id?: string | null
+          needs_review?: boolean
+          paid_amount?: number | null
+          paid_at?: string | null
+          periodo: string
+          qr_code_base64?: string | null
+          raw?: Json | null
+          status?: string
+          ticket_url?: string | null
+          txid: string
+          updated_at?: string
+          valor: number
+        }
+        Update: {
+          copia_cola?: string | null
+          created_at?: string
+          id?: string
+          militar_id?: string
+          mp_payment_id?: string | null
+          needs_review?: boolean
+          paid_amount?: number | null
+          paid_at?: string | null
+          periodo?: string
+          qr_code_base64?: string | null
+          raw?: Json | null
+          status?: string
+          ticket_url?: string | null
+          txid?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
