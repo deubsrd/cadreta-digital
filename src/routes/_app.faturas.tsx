@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import jsPDF from "jspdf";
