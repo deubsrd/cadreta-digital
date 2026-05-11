@@ -102,8 +102,8 @@ export type Database = {
           ativo: boolean
           created_at: string
           id: string
-          identificacao: string
-          nome: string
+          nome_guerra: string
+          posto: string
           telefone: string
           updated_at: string
         }
@@ -111,8 +111,8 @@ export type Database = {
           ativo?: boolean
           created_at?: string
           id?: string
-          identificacao: string
-          nome: string
+          nome_guerra: string
+          posto: string
           telefone: string
           updated_at?: string
         }
@@ -120,8 +120,8 @@ export type Database = {
           ativo?: boolean
           created_at?: string
           id?: string
-          identificacao?: string
-          nome?: string
+          nome_guerra?: string
+          posto?: string
           telefone?: string
           updated_at?: string
         }

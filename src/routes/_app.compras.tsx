@@ -1,18 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listCompras, listMilitares, createCompra, updateCompra, deleteCompra, type Compra } from "@/lib/api";
+import { listCompras, listMilitares, listPagamentos, createCompra, updateCompra, deleteCompra, militarLabel, type Compra, type Militar } from "@/lib/api";
 import { brl, ymd, startOfMonth, endOfMonth } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search, FileDown } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, FileDown, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/compras")({
   component: ComprasPage,
@@ -34,10 +36,11 @@ function ComprasPage() {
 
   const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares });
   const { data: compras = [] } = useQuery({ queryKey: ["compras", range], queryFn: () => listCompras(range) });
+  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos });
 
   const filtered = compras.filter((c) => {
     const s = search.toLowerCase();
-    return !s || c.militares?.nome.toLowerCase().includes(s) || c.militares?.identificacao.toLowerCase().includes(s) || c.itens.toLowerCase().includes(s);
+    return !s || c.militares?.nome_guerra.toLowerCase().includes(s) || c.militares?.posto.toLowerCase().includes(s) || c.itens.toLowerCase().includes(s);
   });
 
   const totalGeral = filtered.reduce((s, c) => s + Number(c.valor), 0);
@@ -50,8 +53,8 @@ function ComprasPage() {
   const exportXlsx = () => {
     const rows = filtered.map((c) => ({
       Data: c.data_compra,
-      Militar: c.militares?.nome,
-      Identificação: c.militares?.identificacao,
+      "Posto/Grad": c.militares?.posto,
+      "Nome de guerra": c.militares?.nome_guerra,
       Itens: c.itens,
       Valor: Number(c.valor),
       Observações: c.observacoes ?? "",
@@ -101,8 +104,8 @@ function ComprasPage() {
                 <tr key={c.id} className="border-b last:border-0 hover:bg-muted/40">
                   <td className="px-4 py-3">{new Date(c.data_compra + "T00:00").toLocaleDateString("pt-BR")}</td>
                   <td className="px-4 py-3">
-                    <div className="font-medium">{c.militares?.nome}</div>
-                    <div className="text-xs text-muted-foreground">{c.militares?.identificacao}</div>
+                    <div className="font-medium">{militarLabel(c.militares)}</div>
+                    <div className="text-xs text-muted-foreground">{c.militares?.telefone}</div>
                   </td>
                   <td className="px-4 py-3 max-w-[280px] truncate" title={c.itens}>{c.itens}</td>
                   <td className="px-4 py-3 text-right font-medium">{brl(Number(c.valor))}</td>
@@ -134,18 +137,19 @@ function ComprasPage() {
         </div>
       </Card>
 
-      <CompraDialog open={open} setOpen={setOpen} editing={editing} militares={militares} onSaved={() => qc.invalidateQueries()} />
+      <CompraDialog open={open} setOpen={setOpen} editing={editing} militares={militares} compras={compras} pagamentos={pagamentos} onSaved={() => qc.invalidateQueries()} />
     </div>
   );
 }
 
-function CompraDialog({ open, setOpen, editing, militares, onSaved }: any) {
+function CompraDialog({ open, setOpen, editing, militares, compras, pagamentos, onSaved }: { open: boolean; setOpen: (b: boolean) => void; editing: Compra | null; militares: Militar[]; compras: Compra[]; pagamentos: any[]; onSaved: () => void }) {
   const [militar_id, setMilitarId] = useState("");
   const [data_compra, setData] = useState(ymd(new Date()));
   const [itens, setItens] = useState("");
   const [valor, setValor] = useState("");
   const [obs, setObs] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   if (open && editing && itens !== editing.itens) {
     setMilitarId(editing.militar_id); setData(editing.data_compra); setItens(editing.itens);
@@ -153,6 +157,19 @@ function CompraDialog({ open, setOpen, editing, militares, onSaved }: any) {
   }
 
   const reset = () => { setMilitarId(""); setData(ymd(new Date())); setItens(""); setValor(""); setObs(""); };
+  const selected = militares.find((m) => m.id === militar_id);
+
+  const periodoStr = ymd(startOfMonth(new Date(data_compra + "T00:00")));
+  const historico = compras.filter((c) => c.militar_id === militar_id).slice(0, 5);
+  const pendenteMes = useMemo(() => {
+    if (!militar_id) return 0;
+    const ms = startOfMonth(new Date(data_compra + "T00:00"));
+    const me = endOfMonth(ms);
+    const total = compras.filter((c) => c.militar_id === militar_id && c.data_compra >= ymd(ms) && c.data_compra <= ymd(me))
+      .reduce((s, c) => s + Number(c.valor), 0);
+    const pago = pagamentos.find((p) => p.militar_id === militar_id && p.periodo === periodoStr);
+    return pago ? 0 : total;
+  }, [militar_id, compras, pagamentos, data_compra, periodoStr]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,18 +191,64 @@ function CompraDialog({ open, setOpen, editing, militares, onSaved }: any) {
         <form onSubmit={submit} className="space-y-4">
           <div>
             <Label>Militar</Label>
-            <Select value={militar_id} onValueChange={setMilitarId} required>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {militares.filter((m: any) => m.ativo).map((m: any) => (
-                  <SelectItem key={m.id} value={m.id}>{m.nome} — {m.identificacao}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="outline" role="combobox" className="w-full justify-between font-normal">
+                  {selected ? militarLabel(selected) : "Buscar por posto ou nome de guerra..."}
+                  <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command filter={(value, search) => value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0}>
+                  <CommandInput placeholder="Digite o posto ou nome..." />
+                  <CommandList>
+                    <CommandEmpty>Nenhum militar encontrado.</CommandEmpty>
+                    <CommandGroup>
+                      {militares.filter((m) => m.ativo).map((m) => (
+                        <CommandItem
+                          key={m.id}
+                          value={`${m.posto} ${m.nome_guerra} ${m.telefone}`}
+                          onSelect={() => { setMilitarId(m.id); setPickerOpen(false); }}
+                        >
+                          <Check className={cn("mr-2 h-4 w-4", militar_id === m.id ? "opacity-100" : "opacity-0")} />
+                          <span className="font-medium">{m.posto}</span>
+                          <span className="ml-1">{m.nome_guerra}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+
+            {selected && (
+              <div className="mt-2 rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">{militarLabel(selected)}</div>
+                    <div className="text-xs text-muted-foreground">{selected.telefone}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Pendente do mês</div>
+                    <div className={cn("font-semibold", pendenteMes > 0 ? "text-destructive" : "text-success")}>{brl(pendenteMes)}</div>
+                  </div>
+                </div>
+                {historico.length > 0 && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-xs text-muted-foreground">Histórico recente ({historico.length})</summary>
+                    <ul className="mt-1 text-xs text-muted-foreground space-y-0.5">
+                      {historico.map((h) => (
+                        <li key={h.id}>{new Date(h.data_compra + "T00:00").toLocaleDateString("pt-BR")} — {h.itens} ({brl(Number(h.valor))})</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Data</Label><Input type="date" required value={data_compra} onChange={(e) => setData(e.target.value)} /></div>
-            <div><Label>Valor (R$)</Label><Input required type="number" step="0.01" min="0" value={valor} onChange={(e) => setValor(e.target.value)} /></div>
+            <div><Label>Valor (R$)</Label><Input required type="number" step="0.01" min="0" inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} /></div>
           </div>
           <div><Label>Itens</Label><Textarea required rows={2} value={itens} onChange={(e) => setItens(e.target.value)} placeholder="Ex.: 1 refrigerante, 1 salgado..." /></div>
           <div><Label>Observações</Label><Textarea rows={2} value={obs} onChange={(e) => setObs(e.target.value)} /></div>
