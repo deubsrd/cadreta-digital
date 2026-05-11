@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel } from "@/lib/api";
+import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel, listPixCobrancas, gerarPix, type PixCobranca } from "@/lib/api";
 import { brl, ymd, startOfMonth, endOfMonth, monthLabel, onlyDigits } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { useMemo, useState } from "react";
-import { CheckCircle2, MessageCircle, RotateCcw, FileDown } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import jsPDF from "jspdf";
@@ -37,6 +38,18 @@ function FaturasPage() {
   const { data: compras = [] } = useQuery({ queryKey: ["compras", range], queryFn: () => listCompras({ from: range.from, to: range.to }) });
   const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos });
   const { data: config } = useQuery({ queryKey: ["config"], queryFn: getConfig });
+  const { data: pixList = [] } = useQuery({ queryKey: ["pix_cobrancas"], queryFn: listPixCobrancas });
+
+  // Realtime: atualiza quando webhook MP marcar como pago
+  useEffect(() => {
+    const ch = supabase.channel("pix_realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pix_cobrancas" }, () => {
+        qc.invalidateQueries({ queryKey: ["pix_cobrancas"] });
+        qc.invalidateQueries({ queryKey: ["pagamentos"] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [qc]);
 
   const faturas = useMemo(() => {
     const map = new Map<string, { total: number; itens: string[] }>();
@@ -49,20 +62,46 @@ function FaturasPage() {
     return [...map.entries()].map(([militar_id, v]) => {
       const militar = militares.find((m) => m.id === militar_id);
       const pago = pagamentos.find((p) => p.militar_id === militar_id && p.periodo === range.periodo);
-      return { militar_id, militar, total: v.total, itens: v.itens, pago };
+      const pix = pixList.find((p) => p.militar_id === militar_id && p.periodo === range.periodo);
+      return { militar_id, militar, total: v.total, itens: v.itens, pago, pix };
     }).sort((a, b) => (a.militar?.nome_guerra ?? "").localeCompare(b.militar?.nome_guerra ?? ""));
-  }, [compras, pagamentos, militares, range.periodo]);
+  }, [compras, pagamentos, militares, pixList, range.periodo]);
 
   const filtered = faturas.filter((f) => filter === "todos" ? true : filter === "pagos" ? !!f.pago : !f.pago);
 
+  const [pixDialog, setPixDialog] = useState<{ pix: PixCobranca; nome: string } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const obterOuGerarPix = async (f: typeof faturas[number]): Promise<PixCobranca | null> => {
+    if (f.pix && Number(f.pix.valor) === Number(f.total) && f.pix.status !== "cancelled") return f.pix;
+    setBusyId(f.militar_id);
+    try {
+      const pix = await gerarPix(f.militar_id, range.periodo, f.total, `Fatura ${monthLabel(range.date)} - ${militarLabel(f.militar)}`);
+      qc.invalidateQueries({ queryKey: ["pix_cobrancas"] });
+      return pix;
+    } catch (e: any) { toast.error(e.message); return null; }
+    finally { setBusyId(null); }
+  };
+
+  const abrirPix = async (f: typeof faturas[number]) => {
+    const pix = await obterOuGerarPix(f);
+    if (pix) setPixDialog({ pix, nome: militarLabel(f.militar) });
+  };
+
   const enviarWhats = async (f: typeof faturas[number]) => {
     if (!config) return;
+    const pix = await obterOuGerarPix(f);
+
+    const pixBlock = pix
+      ? `\n📱 *PIX Copia e Cola:*\n${pix.copia_cola ?? ""}\n\n🔗 Link de pagamento:\n${pix.ticket_url ?? ""}\n\n_Confirmação automática após o pagamento._`
+      : `\nChave PIX: ${config.pix_key || "(configurar PIX)"}`;
+
     const msg = buildMessage(config.mensagem_template, {
       nome: militarLabel(f.militar),
       mes: monthLabel(range.date),
       valor: brl(f.total).replace("R$\u00a0", ""),
       resumo: f.itens.join("\n"),
-      pix: config.pix_key || "(configurar PIX)",
+      pix: pixBlock,
     });
 
     if (config.z_api_instance && config.z_api_token) {
@@ -131,6 +170,8 @@ function FaturasPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold">{militarLabel(f.militar)}</h3>
                   {f.pago ? <Badge className="bg-success text-success-foreground">Pago</Badge> : <Badge variant="destructive">Pendente</Badge>}
+                  {f.pix?.needs_review && <Badge variant="secondary">Conferir valor</Badge>}
+                  {f.pix && f.pix.status === "pending" && !f.pago && <Badge variant="outline">PIX gerado</Badge>}
                 </div>
                 <div className="text-xs text-muted-foreground">{f.militar?.telefone}</div>
                 <details className="mt-2 text-sm">
@@ -140,8 +181,12 @@ function FaturasPage() {
               </div>
               <div className="text-right">
                 <div className="text-xl font-bold">{brl(f.total)}</div>
-                <div className="flex gap-2 mt-2 justify-end">
-                  <Button size="sm" variant="outline" onClick={() => enviarWhats(f)} disabled={!!f.pago}>
+                <div className="flex gap-2 mt-2 justify-end flex-wrap">
+                  <Button size="sm" variant="outline" onClick={() => abrirPix(f)} disabled={!!f.pago || busyId === f.militar_id}>
+                    {busyId === f.militar_id ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <QrCode className="h-4 w-4 mr-1" />}
+                    PIX
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => enviarWhats(f)} disabled={!!f.pago || busyId === f.militar_id}>
                     <MessageCircle className="h-4 w-4 mr-1" /> Cobrar
                   </Button>
                   {f.pago ? (
@@ -162,6 +207,44 @@ function FaturasPage() {
         ))}
         {filtered.length === 0 && <Card className="p-8 text-center text-muted-foreground">Nenhuma fatura nesta seleção.</Card>}
       </div>
+
+      <Dialog open={!!pixDialog} onOpenChange={(o) => !o && setPixDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>PIX — {pixDialog?.nome}</DialogTitle>
+            <DialogDescription>
+              {pixDialog && `${monthLabel(range.date)} · ${brl(Number(pixDialog.pix.valor))}`}
+            </DialogDescription>
+          </DialogHeader>
+          {pixDialog && (
+            <div className="space-y-4">
+              {pixDialog.pix.qr_code_base64 && (
+                <div className="flex justify-center">
+                  <img src={`data:image/png;base64,${pixDialog.pix.qr_code_base64}`} alt="QR Code PIX" className="w-56 h-56 rounded border" />
+                </div>
+              )}
+              {pixDialog.pix.copia_cola && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Copia e Cola</div>
+                  <div className="text-xs bg-muted p-2 rounded break-all max-h-24 overflow-auto">{pixDialog.pix.copia_cola}</div>
+                  <Button size="sm" variant="outline" className="w-full" onClick={() => {
+                    navigator.clipboard.writeText(pixDialog.pix.copia_cola!); toast.success("Copiado");
+                  }}><Copy className="h-4 w-4 mr-1" />Copiar código PIX</Button>
+                </div>
+              )}
+              {pixDialog.pix.ticket_url && (
+                <Button asChild size="sm" variant="secondary" className="w-full">
+                  <a href={pixDialog.pix.ticket_url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4 mr-1" />Abrir página de pagamento</a>
+                </Button>
+              )}
+              <div className="text-xs text-muted-foreground text-center">
+                TXID: <code>{pixDialog.pix.txid}</code><br />
+                Status: <strong>{pixDialog.pix.status}</strong> · Confirmação automática
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

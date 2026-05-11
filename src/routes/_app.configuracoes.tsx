@@ -106,6 +106,18 @@ function ConfigPage() {
           <div><Label>Client-Token (segurança da conta)</Label><Input value={form.z_api_client_token} onChange={(e) => set("z_api_client_token", e.target.value)} /></div>
         </Card>
 
+        <Card className="p-5 space-y-4">
+          <h3 className="font-semibold">Mercado Pago (PIX automático)</h3>
+          <p className="text-xs text-muted-foreground">
+            Cole o <strong>Access Token</strong> da sua conta Mercado Pago (Produção). Cada fatura mensal gera um PIX único com QR Code, copia‑e‑cola e link, e a confirmação ocorre automaticamente via webhook.
+          </p>
+          <div><Label>Access Token</Label><Input type="password" value={form.mp_access_token ?? ""} onChange={(e) => set("mp_access_token", e.target.value)} placeholder="APP_USR-..." /></div>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <div><strong>URL do webhook</strong> (configure no painel MP → Suas integrações → Webhooks):</div>
+            <code className="block break-all bg-muted p-2 rounded">{import.meta.env.VITE_SUPABASE_URL}/functions/v1/mp-webhook</code>
+          </div>
+        </Card>
+
         <div className="flex justify-end">
           <Button type="submit" disabled={busy}>{busy ? "Salvando..." : "Salvar configurações"}</Button>
         </div>
