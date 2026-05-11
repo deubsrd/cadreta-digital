@@ -1,17 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listCompras, listMilitares, listPagamentos, createCompra, updateCompra, deleteCompra, militarLabel, type Compra, type Militar } from "@/lib/api";
+import { listCompras, listMilitares, listPagamentos, listItens, createComprasBulk, updateCompra, deleteCompra, militarLabel, type Compra, type Militar, type Item } from "@/lib/api";
 import { brl, ymd, startOfMonth, endOfMonth } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search, FileDown, Check, ChevronsUpDown } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, FileDown, Check, ChevronsUpDown, X, Wallet, Clock } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_app/compras")({
   component: ComprasPage,
 });
+
+type CartLine = { item: Item; qtd: number; pago_na_hora: boolean };
 
 function ComprasPage() {
   const qc = useQueryClient();
@@ -35,6 +38,7 @@ function ComprasPage() {
   }, [mes]);
 
   const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares });
+  const { data: itens = [] } = useQuery({ queryKey: ["itens"], queryFn: listItens });
   const { data: compras = [] } = useQuery({ queryKey: ["compras", range], queryFn: () => listCompras(range) });
   const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos });
 
@@ -44,11 +48,8 @@ function ComprasPage() {
   });
 
   const totalGeral = filtered.reduce((s, c) => s + Number(c.valor), 0);
-  const porMilitar = useMemo(() => {
-    const map = new Map<string, number>();
-    filtered.forEach((c) => map.set(c.militar_id, (map.get(c.militar_id) ?? 0) + Number(c.valor)));
-    return map;
-  }, [filtered]);
+  const totalNaHora = filtered.filter((c) => c.pago_na_hora).reduce((s, c) => s + Number(c.valor), 0);
+  const totalFiado = totalGeral - totalNaHora;
 
   const exportXlsx = () => {
     const rows = filtered.map((c) => ({
@@ -56,7 +57,9 @@ function ComprasPage() {
       "Posto/Grad": c.militares?.posto,
       "Nome de guerra": c.militares?.nome_guerra,
       Itens: c.itens,
+      Qtd: c.quantidade,
       Valor: Number(c.valor),
+      "Pago na hora": c.pago_na_hora ? "Sim" : "Não",
       Observações: c.observacoes ?? "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -70,12 +73,18 @@ function ComprasPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Compras</h1>
-          <p className="text-sm text-muted-foreground">Caderneta inteligente — registre e edite compras do mês</p>
+          <p className="text-sm text-muted-foreground">PDV — registre compras pagas na hora ou no fiado</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportXlsx}><FileDown className="h-4 w-4 mr-2" />Excel</Button>
-          <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4 mr-2" />Nova compra</Button>
+          <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4 mr-2" />Nova venda</Button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="p-3"><div className="text-xs text-muted-foreground uppercase">Total</div><div className="text-lg md:text-xl font-semibold">{brl(totalGeral)}</div></Card>
+        <Card className="p-3"><div className="text-xs text-muted-foreground uppercase flex items-center gap-1"><Wallet className="h-3 w-3" />Pago na hora</div><div className="text-lg md:text-xl font-semibold text-success">{brl(totalNaHora)}</div></Card>
+        <Card className="p-3"><div className="text-xs text-muted-foreground uppercase flex items-center gap-1"><Clock className="h-3 w-3" />Fiado</div><div className="text-lg md:text-xl font-semibold text-destructive">{brl(totalFiado)}</div></Card>
       </div>
 
       <Card className="p-4">
@@ -94,8 +103,8 @@ function ComprasPage() {
                 <th className="px-4 py-2 font-medium">Data</th>
                 <th className="px-4 py-2 font-medium">Militar</th>
                 <th className="px-4 py-2 font-medium">Itens</th>
+                <th className="px-4 py-2 font-medium text-center">Tipo</th>
                 <th className="px-4 py-2 font-medium text-right">Valor</th>
-                <th className="px-4 py-2 font-medium text-right">Total militar</th>
                 <th className="px-4 py-2"></th>
               </tr>
             </thead>
@@ -107,10 +116,17 @@ function ComprasPage() {
                     <div className="font-medium">{militarLabel(c.militares)}</div>
                     <div className="text-xs text-muted-foreground">{c.militares?.telefone}</div>
                   </td>
-                  <td className="px-4 py-3 max-w-[280px] truncate" title={c.itens}>{c.itens}</td>
+                  <td className="px-4 py-3 max-w-[280px]">
+                    <div className="truncate" title={c.itens}>{c.itens}</div>
+                    {c.quantidade > 1 && <div className="text-xs text-muted-foreground">Qtd: {c.quantidade}</div>}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {c.pago_na_hora
+                      ? <Badge className="bg-success text-success-foreground">Na hora</Badge>
+                      : <Badge variant="outline">Fiado</Badge>}
+                  </td>
                   <td className="px-4 py-3 text-right font-medium">{brl(Number(c.valor))}</td>
-                  <td className="px-4 py-3 text-right text-muted-foreground">{brl(porMilitar.get(c.militar_id) ?? 0)}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
                     <Button size="icon" variant="ghost" onClick={() => { setEditing(c); setOpen(true); }}><Pencil className="h-4 w-4" /></Button>
                     <Button size="icon" variant="ghost" onClick={async () => {
                       if (!confirm("Excluir compra?")) return;
@@ -124,70 +140,104 @@ function ComprasPage() {
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Nenhuma compra no período.</td></tr>
               )}
             </tbody>
-            {filtered.length > 0 && (
-              <tfoot>
-                <tr className="border-t bg-muted/30 font-semibold">
-                  <td colSpan={3} className="px-4 py-3">Total geral</td>
-                  <td className="px-4 py-3 text-right">{brl(totalGeral)}</td>
-                  <td colSpan={2}></td>
-                </tr>
-              </tfoot>
-            )}
           </table>
         </div>
       </Card>
 
-      <CompraDialog open={open} setOpen={setOpen} editing={editing} militares={militares} compras={compras} pagamentos={pagamentos} onSaved={() => qc.invalidateQueries()} />
+      <PdvDialog open={open} setOpen={setOpen} editing={editing} militares={militares} itens={itens} compras={compras} pagamentos={pagamentos} onSaved={() => qc.invalidateQueries()} />
     </div>
   );
 }
 
-function CompraDialog({ open, setOpen, editing, militares, compras, pagamentos, onSaved }: { open: boolean; setOpen: (b: boolean) => void; editing: Compra | null; militares: Militar[]; compras: Compra[]; pagamentos: any[]; onSaved: () => void }) {
+function PdvDialog({ open, setOpen, editing, militares, itens, compras, pagamentos, onSaved }: { open: boolean; setOpen: (b: boolean) => void; editing: Compra | null; militares: Militar[]; itens: Item[]; compras: Compra[]; pagamentos: any[]; onSaved: () => void }) {
   const [militar_id, setMilitarId] = useState("");
   const [data_compra, setData] = useState(ymd(new Date()));
-  const [itens, setItens] = useState("");
-  const [valor, setValor] = useState("");
   const [obs, setObs] = useState("");
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [itemPickerOpen, setItemPickerOpen] = useState(false);
+  const [defaultMode, setDefaultMode] = useState<"avista" | "fiado">("fiado");
+  const [cart, setCart] = useState<CartLine[]>([]);
 
-  if (open && editing && itens !== editing.itens) {
-    setMilitarId(editing.militar_id); setData(editing.data_compra); setItens(editing.itens);
-    setValor(String(editing.valor)); setObs(editing.observacoes ?? "");
+  // Edit mode: free-form single line
+  const [editValor, setEditValor] = useState("");
+  const [editItens, setEditItens] = useState("");
+  const [editPagoNaHora, setEditPagoNaHora] = useState(false);
+
+  if (open && editing && editValor === "" && editing.itens) {
+    setMilitarId(editing.militar_id); setData(editing.data_compra);
+    setEditItens(editing.itens); setEditValor(String(editing.valor));
+    setObs(editing.observacoes ?? ""); setEditPagoNaHora(editing.pago_na_hora);
   }
 
-  const reset = () => { setMilitarId(""); setData(ymd(new Date())); setItens(""); setValor(""); setObs(""); };
+  const reset = () => {
+    setMilitarId(""); setData(ymd(new Date())); setObs("");
+    setCart([]); setEditValor(""); setEditItens(""); setEditPagoNaHora(false);
+  };
   const selected = militares.find((m) => m.id === militar_id);
 
   const periodoStr = ymd(startOfMonth(new Date(data_compra + "T00:00")));
-  const historico = compras.filter((c) => c.militar_id === militar_id).slice(0, 5);
   const pendenteMes = useMemo(() => {
     if (!militar_id) return 0;
     const ms = startOfMonth(new Date(data_compra + "T00:00"));
     const me = endOfMonth(ms);
-    const total = compras.filter((c) => c.militar_id === militar_id && c.data_compra >= ymd(ms) && c.data_compra <= ymd(me))
+    const total = compras.filter((c) => c.militar_id === militar_id && !c.pago_na_hora && c.data_compra >= ymd(ms) && c.data_compra <= ymd(me))
       .reduce((s, c) => s + Number(c.valor), 0);
     const pago = pagamentos.find((p) => p.militar_id === militar_id && p.periodo === periodoStr);
     return pago ? 0 : total;
   }, [militar_id, compras, pagamentos, data_compra, periodoStr]);
 
+  const addToCart = (it: Item) => {
+    setCart((prev) => {
+      const idx = prev.findIndex((l) => l.item.id === it.id && l.pago_na_hora === (defaultMode === "avista"));
+      if (idx >= 0) {
+        const copy = [...prev]; copy[idx] = { ...copy[idx], qtd: copy[idx].qtd + 1 }; return copy;
+      }
+      return [...prev, { item: it, qtd: 1, pago_na_hora: defaultMode === "avista" }];
+    });
+    setItemPickerOpen(false);
+  };
+
+  const lineValor = (l: CartLine) => (l.pago_na_hora ? Number(l.item.preco_avista) : Number(l.item.preco_fiado)) * l.qtd;
+  const totalNaHora = cart.filter((l) => l.pago_na_hora).reduce((s, l) => s + lineValor(l), 0);
+  const totalFiado = cart.filter((l) => !l.pago_na_hora).reduce((s, l) => s + lineValor(l), 0);
+  const totalCart = totalNaHora + totalFiado;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
-      const payload = { militar_id, data_compra, itens, valor: parseFloat(valor.replace(",", ".")), observacoes: obs || null };
-      if (editing) await updateCompra(editing.id, payload);
-      else await createCompra(payload);
-      toast.success(editing ? "Atualizada" : "Registrada");
+      if (editing) {
+        await updateCompra(editing.id, {
+          militar_id, data_compra, itens: editItens,
+          valor: parseFloat(editValor.replace(",", ".")),
+          observacoes: obs || null, pago_na_hora: editPagoNaHora,
+        });
+      } else {
+        if (!cart.length) { toast.error("Adicione ao menos um item"); setBusy(false); return; }
+        const rows = cart.map((l) => ({
+          militar_id, data_compra,
+          itens: l.qtd > 1 ? `${l.qtd}x ${l.item.nome}` : l.item.nome,
+          valor: lineValor(l),
+          quantidade: l.qtd,
+          item_id: l.item.id,
+          pago_na_hora: l.pago_na_hora,
+          observacoes: obs || null,
+        }));
+        await createComprasBulk(rows);
+      }
+      toast.success(editing ? "Atualizada" : "Venda registrada");
       onSaved(); setOpen(false); reset();
     } catch (e: any) { toast.error(e.message); }
     finally { setBusy(false); }
   };
 
+  const itensAtivos = itens.filter((i) => i.ativo);
+
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>{editing ? "Editar compra" : "Nova compra"}</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>{editing ? "Editar compra" : "Nova venda"}</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div>
             <Label>Militar</Label>
@@ -205,14 +255,9 @@ function CompraDialog({ open, setOpen, editing, militares, compras, pagamentos, 
                     <CommandEmpty>Nenhum militar encontrado.</CommandEmpty>
                     <CommandGroup>
                       {militares.filter((m) => m.ativo).map((m) => (
-                        <CommandItem
-                          key={m.id}
-                          value={`${m.posto} ${m.nome_guerra} ${m.telefone}`}
-                          onSelect={() => { setMilitarId(m.id); setPickerOpen(false); }}
-                        >
+                        <CommandItem key={m.id} value={`${m.posto} ${m.nome_guerra} ${m.telefone}`} onSelect={() => { setMilitarId(m.id); setPickerOpen(false); }}>
                           <Check className={cn("mr-2 h-4 w-4", militar_id === m.id ? "opacity-100" : "opacity-0")} />
-                          <span className="font-medium">{m.posto}</span>
-                          <span className="ml-1">{m.nome_guerra}</span>
+                          <span className="font-medium">{m.posto}</span><span className="ml-1">{m.nome_guerra}</span>
                         </CommandItem>
                       ))}
                     </CommandGroup>
@@ -220,41 +265,109 @@ function CompraDialog({ open, setOpen, editing, militares, compras, pagamentos, 
                 </Command>
               </PopoverContent>
             </Popover>
-
             {selected && (
-              <div className="mt-2 rounded-md border bg-muted/30 p-3 text-sm space-y-1">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">{militarLabel(selected)}</div>
-                    <div className="text-xs text-muted-foreground">{selected.telefone}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-muted-foreground">Pendente do mês</div>
-                    <div className={cn("font-semibold", pendenteMes > 0 ? "text-destructive" : "text-success")}>{brl(pendenteMes)}</div>
-                  </div>
-                </div>
-                {historico.length > 0 && (
-                  <details className="mt-1">
-                    <summary className="cursor-pointer text-xs text-muted-foreground">Histórico recente ({historico.length})</summary>
-                    <ul className="mt-1 text-xs text-muted-foreground space-y-0.5">
-                      {historico.map((h) => (
-                        <li key={h.id}>{new Date(h.data_compra + "T00:00").toLocaleDateString("pt-BR")} — {h.itens} ({brl(Number(h.valor))})</li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
+              <div className="mt-2 rounded-md border bg-muted/30 p-2 text-xs flex justify-between">
+                <span className="text-muted-foreground">{selected.telefone}</span>
+                <span>Pendente: <strong className={pendenteMes > 0 ? "text-destructive" : "text-success"}>{brl(pendenteMes)}</strong></span>
               </div>
             )}
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Data</Label><Input type="date" required value={data_compra} onChange={(e) => setData(e.target.value)} /></div>
-            <div><Label>Valor (R$)</Label><Input required type="number" step="0.01" min="0" inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} /></div>
+            {!editing && (
+              <div>
+                <Label>Modo padrão</Label>
+                <div className="grid grid-cols-2 gap-1 rounded-md border p-1">
+                  <button type="button" onClick={() => setDefaultMode("avista")} className={cn("rounded-sm py-1.5 text-xs font-medium", defaultMode === "avista" ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>Pago na hora</button>
+                  <button type="button" onClick={() => setDefaultMode("fiado")} className={cn("rounded-sm py-1.5 text-xs font-medium", defaultMode === "fiado" ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>Fiado</button>
+                </div>
+              </div>
+            )}
           </div>
-          <div><Label>Itens</Label><Textarea required rows={2} value={itens} onChange={(e) => setItens(e.target.value)} placeholder="Ex.: 1 refrigerante, 1 salgado..." /></div>
+
+          {editing ? (
+            <>
+              <div><Label>Itens (descrição)</Label><Textarea required rows={2} value={editItens} onChange={(e) => setEditItens(e.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Valor (R$)</Label><Input required type="number" step="0.01" min="0" inputMode="decimal" value={editValor} onChange={(e) => setEditValor(e.target.value)} /></div>
+                <div>
+                  <Label>Tipo</Label>
+                  <div className="grid grid-cols-2 gap-1 rounded-md border p-1">
+                    <button type="button" onClick={() => setEditPagoNaHora(true)} className={cn("rounded-sm py-1.5 text-xs", editPagoNaHora ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>Na hora</button>
+                    <button type="button" onClick={() => setEditPagoNaHora(false)} className={cn("rounded-sm py-1.5 text-xs", !editPagoNaHora ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>Fiado</button>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Itens</Label>
+                  <Popover open={itemPickerOpen} onOpenChange={setItemPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button type="button" size="sm" variant="outline"><Plus className="h-4 w-4 mr-1" />Adicionar item</Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72 p-0" align="end">
+                      <Command>
+                        <CommandInput placeholder="Buscar item..." />
+                        <CommandList>
+                          <CommandEmpty>Nenhum item.</CommandEmpty>
+                          <CommandGroup>
+                            {itensAtivos.map((it) => (
+                              <CommandItem key={it.id} value={`${it.nome} ${it.categoria ?? ""}`} onSelect={() => addToCart(it)}>
+                                <div className="flex-1">
+                                  <div className="font-medium">{it.nome}</div>
+                                  <div className="text-xs text-muted-foreground">À vista {brl(Number(it.preco_avista))} · Fiado {brl(Number(it.preco_fiado))}</div>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="rounded-md border divide-y max-h-60 overflow-y-auto">
+                  {cart.length === 0 && <div className="p-4 text-center text-sm text-muted-foreground">Carrinho vazio</div>}
+                  {cart.map((l, idx) => (
+                    <div key={idx} className="p-2 flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{l.item.nome}</div>
+                        <div className="flex items-center gap-1 mt-1">
+                          <button type="button" onClick={() => setCart((p) => { const c = [...p]; c[idx] = { ...c[idx], pago_na_hora: !c[idx].pago_na_hora }; return c; })}
+                            className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", l.pago_na_hora ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground")}>
+                            {l.pago_na_hora ? "Na hora" : "Fiado"}
+                          </button>
+                          <span className="text-xs text-muted-foreground">{brl(l.pago_na_hora ? Number(l.item.preco_avista) : Number(l.item.preco_fiado))} cada</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button type="button" size="icon" variant="outline" className="h-7 w-7" onClick={() => setCart((p) => { const c = [...p]; c[idx] = { ...c[idx], qtd: Math.max(1, c[idx].qtd - 1) }; return c; })}>-</Button>
+                        <span className="w-6 text-center text-sm">{l.qtd}</span>
+                        <Button type="button" size="icon" variant="outline" className="h-7 w-7" onClick={() => setCart((p) => { const c = [...p]; c[idx] = { ...c[idx], qtd: c[idx].qtd + 1 }; return c; })}>+</Button>
+                      </div>
+                      <div className="w-20 text-right text-sm font-medium">{brl(lineValor(l))}</div>
+                      <Button type="button" size="icon" variant="ghost" onClick={() => setCart((p) => p.filter((_, i) => i !== idx))}><X className="h-4 w-4" /></Button>
+                    </div>
+                  ))}
+                </div>
+                {cart.length > 0 && (
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded bg-muted/50 p-2"><div className="text-muted-foreground">Na hora</div><div className="font-semibold text-success">{brl(totalNaHora)}</div></div>
+                    <div className="rounded bg-muted/50 p-2"><div className="text-muted-foreground">Fiado</div><div className="font-semibold text-destructive">{brl(totalFiado)}</div></div>
+                    <div className="rounded bg-primary/10 p-2"><div className="text-muted-foreground">Total</div><div className="font-semibold">{brl(totalCart)}</div></div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
           <div><Label>Observações</Label><Textarea rows={2} value={obs} onChange={(e) => setObs(e.target.value)} /></div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button type="submit" disabled={busy || !militar_id}>{busy ? "Salvando..." : "Salvar"}</Button>
+            <Button type="submit" disabled={busy || !militar_id}>{busy ? "Salvando..." : editing ? "Salvar" : `Registrar ${brl(totalCart)}`}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
