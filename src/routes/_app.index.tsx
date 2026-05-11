@@ -77,7 +77,7 @@ function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis dataKey="label" stroke="var(--color-muted-foreground)" fontSize={12} />
                 <YAxis stroke="var(--color-muted-foreground)" fontSize={12} tickFormatter={(v) => `R$${v}`} />
-                <Tooltip formatter={(v: number) => brl(v)} contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 }} />
+                <Tooltip formatter={(v: any) => brl(Number(v))} contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 }} />
                 <Bar dataKey="total" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -102,7 +102,7 @@ function Dashboard() {
                   <Cell fill="var(--color-success)" />
                   <Cell fill="var(--color-accent)" />
                 </Pie>
-                <Tooltip formatter={(v: number) => brl(v)} />
+                <Tooltip formatter={(v: any) => brl(Number(v))} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>

@@ -75,7 +75,7 @@ export async function listCompras(opts?: { from?: string; to?: string }) {
   return data as Compra[];
 }
 
-export async function createCompra(c: { militar_id: string; data_compra: string; itens: string; valor: number; observacoes?: string }) {
+export async function createCompra(c: { militar_id: string; data_compra: string; itens: string; valor: number; observacoes?: string | null }) {
   const { error } = await supabase.from("compras").insert(c);
   if (error) throw error;
 }
