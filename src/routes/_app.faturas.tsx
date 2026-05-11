@@ -170,6 +170,8 @@ function FaturasPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold">{militarLabel(f.militar)}</h3>
                   {f.pago ? <Badge className="bg-success text-success-foreground">Pago</Badge> : <Badge variant="destructive">Pendente</Badge>}
+                  {f.pix?.needs_review && <Badge variant="secondary">Conferir valor</Badge>}
+                  {f.pix && f.pix.status === "pending" && !f.pago && <Badge variant="outline">PIX gerado</Badge>}
                 </div>
                 <div className="text-xs text-muted-foreground">{f.militar?.telefone}</div>
                 <details className="mt-2 text-sm">
@@ -179,8 +181,12 @@ function FaturasPage() {
               </div>
               <div className="text-right">
                 <div className="text-xl font-bold">{brl(f.total)}</div>
-                <div className="flex gap-2 mt-2 justify-end">
-                  <Button size="sm" variant="outline" onClick={() => enviarWhats(f)} disabled={!!f.pago}>
+                <div className="flex gap-2 mt-2 justify-end flex-wrap">
+                  <Button size="sm" variant="outline" onClick={() => abrirPix(f)} disabled={!!f.pago || busyId === f.militar_id}>
+                    {busyId === f.militar_id ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <QrCode className="h-4 w-4 mr-1" />}
+                    PIX
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => enviarWhats(f)} disabled={!!f.pago || busyId === f.militar_id}>
                     <MessageCircle className="h-4 w-4 mr-1" /> Cobrar
                   </Button>
                   {f.pago ? (
@@ -201,6 +207,44 @@ function FaturasPage() {
         ))}
         {filtered.length === 0 && <Card className="p-8 text-center text-muted-foreground">Nenhuma fatura nesta seleção.</Card>}
       </div>
+
+      <Dialog open={!!pixDialog} onOpenChange={(o) => !o && setPixDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>PIX — {pixDialog?.nome}</DialogTitle>
+            <DialogDescription>
+              {pixDialog && `${monthLabel(range.date)} · ${brl(Number(pixDialog.pix.valor))}`}
+            </DialogDescription>
+          </DialogHeader>
+          {pixDialog && (
+            <div className="space-y-4">
+              {pixDialog.pix.qr_code_base64 && (
+                <div className="flex justify-center">
+                  <img src={`data:image/png;base64,${pixDialog.pix.qr_code_base64}`} alt="QR Code PIX" className="w-56 h-56 rounded border" />
+                </div>
+              )}
+              {pixDialog.pix.copia_cola && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Copia e Cola</div>
+                  <div className="text-xs bg-muted p-2 rounded break-all max-h-24 overflow-auto">{pixDialog.pix.copia_cola}</div>
+                  <Button size="sm" variant="outline" className="w-full" onClick={() => {
+                    navigator.clipboard.writeText(pixDialog.pix.copia_cola!); toast.success("Copiado");
+                  }}><Copy className="h-4 w-4 mr-1" />Copiar código PIX</Button>
+                </div>
+              )}
+              {pixDialog.pix.ticket_url && (
+                <Button asChild size="sm" variant="secondary" className="w-full">
+                  <a href={pixDialog.pix.ticket_url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4 mr-1" />Abrir página de pagamento</a>
+                </Button>
+              )}
+              <div className="text-xs text-muted-foreground text-center">
+                TXID: <code>{pixDialog.pix.txid}</code><br />
+                Status: <strong>{pixDialog.pix.status}</strong> · Confirmação automática
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
