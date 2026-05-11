@@ -93,7 +93,7 @@ function FaturasPage() {
     const pix = await obterOuGerarPix(f);
 
     const pixBlock = pix
-      ? `\n📱 *PIX Copia e Cola:*\n${pix.copia_cola ?? ""}\n\n_Confirmação automática após o pagamento._`
+      ? `\n📱 *PIX Copia e Cola:*\n${pix.copia_cola ?? ""}${pix.ticket_url ? `\n\n🔗 Link: ${pix.ticket_url}` : ""}\n\n_Confirmação automática após o pagamento._`
       : `\nChave PIX: ${config.pix_key || "(configurar PIX)"}`;
 
     const msg = buildMessage(config.mensagem_template, {
