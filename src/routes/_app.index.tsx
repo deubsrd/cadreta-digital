@@ -206,6 +206,37 @@ function Dashboard() {
           )}
         </Card>
       </div>
+
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h3 className="font-semibold flex items-center gap-2"><QrCode className="h-4 w-4" />PIX em tempo real</h3>
+          <div className="flex gap-2 flex-wrap text-xs">
+            <Badge variant="secondary">Hoje: {pixStats.recebidosHoje} · {brl(pixStats.totalHoje)}</Badge>
+            <Badge variant="outline">Aguardando: {pixStats.aguardando}</Badge>
+            {pixStats.revisao > 0 && <Badge variant="destructive">Conferir: {pixStats.revisao}</Badge>}
+          </div>
+        </div>
+        {pixStats.ultimosPagos.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum pagamento PIX recebido ainda.</p>
+        ) : (
+          <div className="space-y-2">
+            {pixStats.ultimosPagos.map((p) => {
+              const m = militares.find((x) => x.id === p.militar_id);
+              return (
+                <div key={p.id} className="flex items-center justify-between p-3 rounded-md bg-muted/50 text-sm">
+                  <div>
+                    <div className="font-medium">{militarLabel(m)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {monthLabel(new Date(p.periodo + "T00:00"))} · {p.paid_at ? new Date(p.paid_at).toLocaleString("pt-BR") : "—"}
+                    </div>
+                  </div>
+                  <div className="font-semibold text-success">{brl(Number(p.paid_amount ?? p.valor))}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
