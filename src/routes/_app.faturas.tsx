@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, Loader2 } from "lucide-react";
+import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, Loader2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import jsPDF from "jspdf";
@@ -93,7 +93,7 @@ function FaturasPage() {
     const pix = await obterOuGerarPix(f);
 
     const pixBlock = pix
-      ? `\n📱 *PIX Copia e Cola:*\n${pix.copia_cola ?? ""}\n\n_Confirmação automática após o pagamento._`
+      ? `\n📱 *PIX Copia e Cola:*\n${pix.copia_cola ?? ""}${pix.ticket_url ? `\n\n🔗 Link: ${pix.ticket_url}` : ""}\n\n_Confirmação automática após o pagamento._`
       : `\nChave PIX: ${config.pix_key || "(configurar PIX)"}`;
 
     const msg = buildMessage(config.mensagem_template, {
@@ -222,6 +222,13 @@ function FaturasPage() {
                 <div className="flex justify-center">
                   <img src={`data:image/png;base64,${pixDialog.pix.qr_code_base64}`} alt="QR Code PIX" className="w-56 h-56 rounded border" />
                 </div>
+              )}
+              {pixDialog.pix.ticket_url && (
+                <Button size="sm" variant="outline" className="w-full" asChild>
+                  <a href={pixDialog.pix.ticket_url} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-1" />Abrir página de pagamento
+                  </a>
+                </Button>
               )}
               {pixDialog.pix.copia_cola && (
                 <div className="space-y-2">
