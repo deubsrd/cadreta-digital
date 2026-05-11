@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel } from "@/lib/api";
+import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel, listPixCobrancas, gerarPix, type PixCobranca } from "@/lib/api";
 import { brl, ymd, startOfMonth, endOfMonth, monthLabel, onlyDigits } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { useMemo, useState } from "react";
-import { CheckCircle2, MessageCircle, RotateCcw, FileDown } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import jsPDF from "jspdf";
