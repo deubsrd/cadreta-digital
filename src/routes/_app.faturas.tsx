@@ -141,7 +141,7 @@ function FaturasPage() {
               <div className="text-right">
                 <div className="text-xl font-bold">{brl(f.total)}</div>
                 <div className="flex gap-2 mt-2 justify-end">
-                  <Button size="sm" variant="outline" onClick={() => enviarWhats(f)} disabled={f.pago}>
+                  <Button size="sm" variant="outline" onClick={() => enviarWhats(f)} disabled={!!f.pago}>
                     <MessageCircle className="h-4 w-4 mr-1" /> Cobrar
                   </Button>
                   {f.pago ? (
