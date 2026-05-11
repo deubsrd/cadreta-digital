@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { listCompras, listPagamentos, listMilitares, listItens, militarLabel } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { listCompras, listPagamentos, listMilitares, listItens, listPixCobrancas, militarLabel } from "@/lib/api";
 import { brl, monthLabel, startOfMonth, ymd } from "@/lib/format";
 import { Card } from "@/components/ui/card";
-import { TrendingUp, Users, AlertTriangle, CheckCircle2, Wallet, Package } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { TrendingUp, Users, AlertTriangle, CheckCircle2, Wallet, Package, QrCode } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_app/")({
   component: Dashboard,
