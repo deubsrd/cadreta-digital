@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import jsPDF from "jspdf";
@@ -93,7 +93,7 @@ function FaturasPage() {
     const pix = await obterOuGerarPix(f);
 
     const pixBlock = pix
-      ? `\n📱 *PIX Copia e Cola:*\n${pix.copia_cola ?? ""}\n\n🔗 Link de pagamento:\n${pix.ticket_url ?? ""}\n\n_Confirmação automática após o pagamento._`
+      ? `\n📱 *PIX Copia e Cola:*\n${pix.copia_cola ?? ""}\n\n_Confirmação automática após o pagamento._`
       : `\nChave PIX: ${config.pix_key || "(configurar PIX)"}`;
 
     const msg = buildMessage(config.mensagem_template, {
@@ -231,11 +231,6 @@ function FaturasPage() {
                     navigator.clipboard.writeText(pixDialog.pix.copia_cola!); toast.success("Copiado");
                   }}><Copy className="h-4 w-4 mr-1" />Copiar código PIX</Button>
                 </div>
-              )}
-              {pixDialog.pix.ticket_url && (
-                <Button asChild size="sm" variant="secondary" className="w-full">
-                  <a href={pixDialog.pix.ticket_url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4 mr-1" />Abrir página de pagamento</a>
-                </Button>
               )}
               <div className="text-xs text-muted-foreground text-center">
                 TXID: <code>{pixDialog.pix.txid}</code><br />

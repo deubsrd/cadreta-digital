@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
       mp_payment_id: String(mpJson.id),
       qr_code_base64: tx.qr_code_base64 ?? null,
       copia_cola: tx.qr_code ?? null,
-      ticket_url: tx.ticket_url ?? null,
+      ticket_url: null,
       status: "pending",
       raw: mpJson,
     };
