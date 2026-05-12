@@ -122,7 +122,7 @@ function ConfigPage() {
           <Button type="button" variant="outline" disabled={busy} onClick={async () => {
             setBusy(true);
             try {
-              const { data, error } = await (await import("@/integrations/supabase/client")).supabase.functions.invoke("cobranca-automatica", { body: {}, headers: {} });
+              const { data, error } = await (await import("@/integrations/supabase/client")).supabase.functions.invoke("cobranca-automatica", { body: { force: true } });
               if (error) throw error;
               if ((data as any)?.error) throw new Error((data as any).error);
               const r = data as any;
