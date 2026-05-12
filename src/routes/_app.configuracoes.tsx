@@ -118,7 +118,19 @@ function ConfigPage() {
           </div>
         </Card>
 
-        <div className="flex justify-end">
+        <div className="flex justify-between items-center gap-2 flex-wrap">
+          <Button type="button" variant="outline" disabled={busy} onClick={async () => {
+            setBusy(true);
+            try {
+              const { data, error } = await (await import("@/integrations/supabase/client")).supabase.functions.invoke("cobranca-automatica", { body: {}, headers: {} });
+              if (error) throw error;
+              if ((data as any)?.error) throw new Error((data as any).error);
+              const r = data as any;
+              if (r?.skipped) toast.info(`Pulado: ${r.reason}`);
+              else toast.success(`Cobrança disparada: ${r?.processados ?? 0} militar(es) processado(s)`);
+            } catch (e: any) { toast.error(e.message); }
+            finally { setBusy(false); }
+          }}>Disparar cobrança agora (forçar)</Button>
           <Button type="submit" disabled={busy}>{busy ? "Salvando..." : "Salvar configurações"}</Button>
         </div>
       </form>
