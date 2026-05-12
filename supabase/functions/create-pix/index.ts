@@ -25,8 +25,16 @@ Deno.serve(async (req: Request) => {
     // Reusa cobrança existente ainda pendente
     const { data: existing } = await admin.from("pix_cobrancas")
       .select("*").eq("militar_id", militar_id).eq("periodo", periodo).maybeSingle();
-    if (existing && existing.status === "paid") return j({ error: "Fatura já paga" }, 400);
-    if (existing && Number(existing.valor) === Number(valor)) {
+
+    // Só bloqueia se realmente já há pagamento registrado quitando esta fatura
+    if (existing && existing.status === "paid") {
+      const { data: pago } = await admin.from("pagamentos")
+        .select("valor").eq("militar_id", militar_id).eq("periodo", periodo).maybeSingle();
+      if (pago && Number(pago.valor) >= Number(valor)) {
+        return j({ error: "Fatura já paga" }, 400);
+      }
+      // PIX antigo marcado como pago mas valor da fatura mudou — gera nova cobrança
+    } else if (existing && Number(existing.valor) === Number(valor) && existing.status !== "cancelled") {
       return j({ ok: true, pix: existing, reused: true });
     }
 
