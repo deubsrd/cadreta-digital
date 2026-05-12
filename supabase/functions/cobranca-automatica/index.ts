@@ -25,8 +25,10 @@ Deno.serve(async (req: Request) => {
 
   try {
     const url = new URL(req.url);
-    const force = url.searchParams.get("force") === "1";
-    const dryRun = url.searchParams.get("dry") === "1";
+    let bodyJson: any = {};
+    try { if (req.method !== "GET") bodyJson = await req.json(); } catch { /* ignore */ }
+    const force = url.searchParams.get("force") === "1" || bodyJson?.force === true;
+    const dryRun = url.searchParams.get("dry") === "1" || bodyJson?.dry === true;
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
