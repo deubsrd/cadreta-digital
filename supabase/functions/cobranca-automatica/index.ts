@@ -13,6 +13,35 @@ function brl(n: number) { return n.toLocaleString("pt-BR", { style: "currency", 
 function onlyDigits(s: string) { return (s ?? "").replace(/\D+/g, ""); }
 function ymd(d: Date) { const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,"0"); const dd = String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${dd}`; }
 
+/**
+ * Normaliza um telefone brasileiro para o formato canônico "+55 DD NNNNNNNNN".
+ * A Z-API aceita o número com DDI+DDD+número sem caracteres especiais.
+ * Esta função é uma cópia da lógica em src/lib/format.ts, necessária aqui pois
+ * Edge Functions rodam em Deno isolado, sem acesso ao código do frontend.
+ */
+function formatBrazilPhone(raw: string): string | null {
+  if (!raw) return null;
+  let digits = onlyDigits(raw);
+  // Remove DDI 55 se já estiver incluso
+  if (digits.startsWith("55") && digits.length > 11) digits = digits.slice(2);
+  if (digits.length < 10 || digits.length > 11) return null;
+  const ddd = digits.slice(0, 2);
+  const numero = digits.slice(2);
+  const dddNum = parseInt(ddd, 10);
+  if (dddNum < 11 || dddNum > 99) return null;
+  return `+55 ${ddd} ${numero}`;
+}
+
+/**
+ * Extrai apenas os dígitos do número formatado para envio à Z-API.
+ * A Z-API espera o número como "5592991176452" (DDI + DDD + número, sem espaços).
+ */
+function phoneForZApi(raw: string): string {
+  const formatted = formatBrazilPhone(raw);
+  // Usa o número formatado se possível; senão, cai de volta para onlyDigits (registros antigos).
+  return onlyDigits(formatted ?? raw);
+}
+
 // "now" em horário de Brasília
 function nowBR() {
   const s = new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
@@ -147,7 +176,7 @@ Deno.serve(async (req: Request) => {
           const r = await fetch(`https://api.z-api.io/instances/${cfg.z_api_instance}/token/${cfg.z_api_token}/send-text`, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...(cfg.z_api_client_token ? { "Client-Token": cfg.z_api_client_token } : {}) },
-            body: JSON.stringify({ phone: onlyDigits(mil.telefone ?? ""), message: msg }),
+            body: JSON.stringify({ phone: phoneForZApi(mil.telefone ?? ""), message: msg }),
           });
           waOk = r.ok;
           if (!r.ok) waErr = `Z-API ${r.status}: ${(await r.text()).slice(0,200)}`;
