@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel, listPixCobrancas, gerarPix, type PixCobranca } from "@/lib/api";
-import { brl, ymd, startOfMonth, endOfMonth, monthLabel, onlyDigits } from "@/lib/format";
+import { brl, ymd, startOfMonth, endOfMonth, monthLabel, onlyDigits, formatBrazilPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,7 +107,8 @@ function FaturasPage() {
     if (config.z_api_instance && config.z_api_token) {
       try {
         const { data, error } = await supabase.functions.invoke("send-whatsapp", {
-          body: { phone: onlyDigits(f.militar?.telefone ?? ""), message: msg },
+          // Envia apenas os dígitos: a Edge Function send-whatsapp reconstrói o formato correto para a Z-API.
+          body: { phone: onlyDigits(formatBrazilPhone(f.militar?.telefone ?? "") ?? f.militar?.telefone ?? ""), message: msg },
         });
         if (error) throw error;
         if ((data as any)?.error) throw new Error((data as any).error);
@@ -117,7 +118,9 @@ function FaturasPage() {
         toast.error(`Falha Z-API: ${e.message}. Abrindo WhatsApp manual.`);
       }
     }
-    const url = `https://wa.me/${onlyDigits(f.militar?.telefone ?? "")}?text=${encodeURIComponent(msg)}`;
+    // O wa.me aceita DDI+DDD+número sem formatação: "5592991176452"
+    const phoneDigits = onlyDigits(formatBrazilPhone(f.militar?.telefone ?? "") ?? f.militar?.telefone ?? "");
+    const url = `https://wa.me/${phoneDigits}?text=${encodeURIComponent(msg)}`;
     window.open(url, "_blank");
   };
 
