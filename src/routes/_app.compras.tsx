@@ -377,3 +377,207 @@ function PdvDialog({ open, setOpen, editing, militares, itens, compras, pagament
     </Dialog>
   );
 }
+
+type ImpRow = {
+  data_compra: string;
+  militar_nome: string;
+  militar_id: string;
+  itens: string;
+  valor: string;
+  quantidade: string;
+  pago_na_hora: boolean;
+  observacoes: string;
+  item_id?: string;
+  _error?: string;
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseDateCell(v: any): string {
+  if (v === null || v === undefined || v === "") return "";
+  if (typeof v === "number") {
+    // Excel serial date
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    if (!isNaN(d.getTime())) return ymd(d);
+  }
+  const s = String(v).trim();
+  const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (br) {
+    const [, dd, mm, yyRaw] = br;
+    const yy = yyRaw.length === 2 ? `20${yyRaw}` : yyRaw;
+    return `${yy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  }
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return ymd(d);
+  return s;
+}
+
+function parseValor(v: any): string {
+  if (v === null || v === undefined || v === "") return "";
+  if (typeof v === "number") return String(v);
+  const s = String(v).replace(/[^\d,.\-]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+  return s;
+}
+
+function parseBool(v: any): boolean {
+  const s = String(v ?? "").trim().toLowerCase();
+  return s === "sim" || s === "s" || s === "true" || s === "1" || s === "yes" || s === "y";
+}
+
+function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boolean; setOpen: (b: boolean) => void; militares: Militar[]; onDone: () => void }) {
+  const [rows, setRows] = useState<ImpRow[]>([]);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const militaresByName = useMemo(() => {
+    const map = new Map<string, Militar>();
+    militares.forEach((m) => map.set(m.nome_guerra.trim().toLowerCase(), m));
+    return map;
+  }, [militares]);
+
+  const validate = (list: ImpRow[]): ImpRow[] => {
+    return list.map((r) => {
+      let _error: string | undefined;
+      let militar_id = r.militar_id;
+      if (!militar_id && r.militar_nome) {
+        const found = militaresByName.get(r.militar_nome.trim().toLowerCase());
+        if (found) militar_id = found.id;
+      }
+      const valorNum = parseFloat(r.valor);
+      if (!r.data_compra || !/^\d{4}-\d{2}-\d{2}$/.test(r.data_compra)) _error = "Data inválida";
+      else if (!militar_id) _error = `Militar não encontrado: ${r.militar_nome || "(vazio)"}`;
+      else if (!r.itens?.trim()) _error = "Item vazio";
+      else if (!r.valor || isNaN(valorNum) || valorNum <= 0) _error = "Valor inválido";
+      else if (r.item_id && !UUID_RE.test(r.item_id)) _error = "item_id inválido";
+      return { ...r, militar_id, _error };
+    });
+  };
+
+  const handleFile = async (file: File) => {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json<any>(ws, { defval: "" });
+    const norm = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const parsed: ImpRow[] = json.map((r) => {
+      const entries = Object.entries(r).map(([k, v]) => [norm(k), v] as const);
+      const get = (...keys: string[]) => entries.find(([k]) => keys.includes(k))?.[1] ?? "";
+      const dataRaw = get("data", "datacompra", "datadacompra");
+      const valorRaw = get("valor", "preco", "preço", "total");
+      const qtdRaw = get("quantidade", "qtd");
+      const itemIdRaw = String(get("itemid") ?? "").trim();
+      return {
+        data_compra: parseDateCell(dataRaw),
+        militar_nome: String(get("militar", "nomedeguerra", "nomeguerra", "nome") ?? "").trim(),
+        militar_id: "",
+        itens: String(get("item", "produto", "descricao", "descrição", "itens") ?? "").trim(),
+        valor: parseValor(valorRaw),
+        quantidade: qtdRaw === "" || qtdRaw === null || qtdRaw === undefined ? "1" : String(qtdRaw),
+        pago_na_hora: parseBool(get("pagonahora", "pago")),
+        observacoes: String(get("observacoes", "observações", "obs") ?? "").trim(),
+        item_id: itemIdRaw || undefined,
+      };
+    });
+    setRows(validate(parsed));
+  };
+
+  const updateRow = (i: number, patch: Partial<ImpRow>) => {
+    setRows((rs) => validate(rs.map((r, idx) => (idx === i ? { ...r, ...patch, militar_id: patch.militar_nome !== undefined ? "" : r.militar_id } : r))));
+  };
+  const removeRow = (i: number) => setRows((rs) => rs.filter((_, idx) => idx !== i));
+
+  const valid = rows.filter((r) => !r._error);
+  const invalid = rows.filter((r) => r._error);
+
+  const confirmar = async () => {
+    if (!valid.length) return;
+    setBusy(true);
+    try {
+      const qtd = (r: ImpRow) => Math.max(1, parseInt(r.quantidade, 10) || 1);
+      await createComprasBulk(valid.map((r) => ({
+        militar_id: r.militar_id,
+        data_compra: r.data_compra,
+        itens: r.itens,
+        valor: parseFloat(r.valor),
+        quantidade: qtd(r),
+        item_id: r.item_id || null,
+        pago_na_hora: r.pago_na_hora,
+        observacoes: r.observacoes || null,
+      })));
+      toast.success(`${valid.length} compra(s) importada(s)`);
+      setRows([]); setOpen(false); onDone();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setRows([]); }}>
+      <DialogContent className="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Importar planilha de compras</DialogTitle>
+        </DialogHeader>
+        {rows.length === 0 ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              A planilha deve conter as colunas: <b>Data</b>, <b>Militar</b> (nome de guerra), <b>Item</b>, <b>Valor</b>, <b>Quantidade</b> (opcional), <b>Pago na hora</b> (Sim/Não), <b>Observações</b> (opcional).
+            </p>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} className="hidden" />
+            <Button onClick={() => fileRef.current?.click()}>
+              <Upload className="h-4 w-4 mr-2" /> Selecionar arquivo
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex gap-3 text-sm">
+              <Badge>{valid.length} válidos</Badge>
+              {invalid.length > 0 && <Badge variant="destructive">{invalid.length} com erro</Badge>}
+            </div>
+            <div className="max-h-[55vh] overflow-auto border rounded-md">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 sticky top-0">
+                  <tr className="text-left">
+                    <th className="px-2 py-2 w-32">Data</th>
+                    <th className="px-2 py-2">Militar</th>
+                    <th className="px-2 py-2">Item</th>
+                    <th className="px-2 py-2 w-16">Qtd</th>
+                    <th className="px-2 py-2 w-24">Valor</th>
+                    <th className="px-2 py-2 w-20">Na hora</th>
+                    <th className="px-2 py-2">Observações</th>
+                    <th className="px-2 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i} className={`border-t ${r._error ? "bg-destructive/5" : ""}`}>
+                      <td className="px-2 py-1"><Input className="h-8" type="date" value={r.data_compra} onChange={(e) => updateRow(i, { data_compra: e.target.value })} /></td>
+                      <td className="px-2 py-1">
+                        <Input className="h-8" value={r.militar_nome} onChange={(e) => updateRow(i, { militar_nome: e.target.value })} />
+                        {r._error && <div className="text-xs text-destructive flex items-center gap-1 mt-1"><AlertTriangle className="h-3 w-3" />{r._error}</div>}
+                      </td>
+                      <td className="px-2 py-1"><Input className="h-8" value={r.itens} onChange={(e) => updateRow(i, { itens: e.target.value })} /></td>
+                      <td className="px-2 py-1"><Input className="h-8" type="number" min="1" value={r.quantidade} onChange={(e) => updateRow(i, { quantidade: e.target.value })} /></td>
+                      <td className="px-2 py-1"><Input className="h-8" type="number" step="0.01" value={r.valor} onChange={(e) => updateRow(i, { valor: e.target.value })} /></td>
+                      <td className="px-2 py-1 text-center">
+                        <input type="checkbox" checked={r.pago_na_hora} onChange={(e) => updateRow(i, { pago_na_hora: e.target.checked })} />
+                      </td>
+                      <td className="px-2 py-1"><Input className="h-8" value={r.observacoes} onChange={(e) => updateRow(i, { observacoes: e.target.value })} /></td>
+                      <td className="px-2 py-1 text-right">
+                        <Button size="icon" variant="ghost" onClick={() => removeRow(i)}><Trash2 className="h-4 w-4" /></Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => { setOpen(false); setRows([]); }}>Cancelar</Button>
+          <Button onClick={confirmar} disabled={busy || !valid.length}>{busy ? "Importando..." : `Importar ${valid.length}`}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
