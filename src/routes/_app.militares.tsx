@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Upload, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { onlyDigits } from "@/lib/format";
+import { onlyDigits, formatBrazilPhone, isValidBrazilPhone } from "@/lib/format";
 import * as XLSX from "xlsx";
 
 export const Route = createFileRoute("/_app/militares")({
@@ -117,8 +117,14 @@ function MilitarDialog({ open, setOpen, editing, onSaved }: { open: boolean; set
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Valida o telefone antes de tentar salvar, para dar feedback imediato ao usuário.
+    if (!isValidBrazilPhone(telefone)) {
+      toast.error("Telefone inválido. Use o formato: (92) 99117-6452");
+      return;
+    }
     setBusy(true);
     try {
+      // A normalização final (+55 DD NNNNNNNNN) é feita dentro de upsertMilitar → api.ts.
       await upsertMilitar({ id: editing?.id, posto: posto.trim().toUpperCase(), nome_guerra: nomeGuerra.trim(), telefone: telefone.trim(), ativo });
       toast.success(editing ? "Atualizado" : "Cadastrado");
       onSaved(); setOpen(false); reset();
@@ -137,7 +143,16 @@ function MilitarDialog({ open, setOpen, editing, onSaved }: { open: boolean; set
             <div><Label>Posto/Graduação</Label><Input required placeholder="3º SGT" value={posto} onChange={(e) => setPosto(e.target.value)} /></div>
             <div><Label>Nome de guerra</Label><Input required placeholder="Albuquerque" value={nomeGuerra} onChange={(e) => setNomeGuerra(e.target.value)} /></div>
           </div>
-          <div><Label>Telefone (WhatsApp)</Label><Input required placeholder="55 11 9 9999-9999" value={telefone} onChange={(e) => setTelefone(e.target.value)} /></div>
+          <div>
+            <Label>Telefone (WhatsApp)</Label>
+            <Input required placeholder="(92) 99117-6452" value={telefone} onChange={(e) => setTelefone(e.target.value)} />
+            {/* Exibe preview do número formatado em tempo real para o usuário confirmar */}
+            {telefone && (
+              <p className={`text-xs mt-1 ${isValidBrazilPhone(telefone) ? "text-muted-foreground" : "text-destructive"}`}>
+                {isValidBrazilPhone(telefone) ? `✓ Será salvo como: ${formatBrazilPhone(telefone)}` : "Número inválido"}
+              </p>
+            )}
+          </div>
           <div className="flex items-center justify-between"><Label>Ativo</Label><Switch checked={ativo} onCheckedChange={setAtivo} /></div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
@@ -156,19 +171,24 @@ function ImportDialog({ open, setOpen, existing, onDone }: { open: boolean; setO
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Conjunto de telefones já cadastrados normalizados (apenas dígitos do número local).
+  // Usamos onlyDigits aqui para compatibilidade com registros antigos que possam não ter o prefixo +55.
   const existingPhones = useMemo(() => new Set(existing.map((m) => onlyDigits(m.telefone))), [existing]);
 
   const validate = (list: Row[]): Row[] => {
     const seen = new Set<string>();
     return list.map((r) => {
-      const tel = onlyDigits(r.telefone);
+      // Tenta formatar para verificar validade e obter o número canônico
+      const formatted = formatBrazilPhone(r.telefone);
+      const digitsKey = onlyDigits(r.telefone);
       let _error: string | undefined;
       if (!r.posto?.trim()) _error = "Posto vazio";
       else if (!r.nome_guerra?.trim()) _error = "Nome de guerra vazio";
-      else if (!tel || tel.length < 10) _error = "Telefone inválido";
-      else if (existingPhones.has(tel)) _error = "Telefone já cadastrado";
-      else if (seen.has(tel)) _error = "Telefone duplicado na planilha";
-      seen.add(tel);
+      else if (!formatted) _error = "Telefone inválido";
+      else if (existingPhones.has(onlyDigits(formatted))) _error = "Telefone já cadastrado";
+      else if (seen.has(onlyDigits(formatted))) _error = "Telefone duplicado na planilha";
+      if (formatted) seen.add(onlyDigits(formatted));
+      else if (digitsKey) seen.add(digitsKey);
       return { ...r, _error };
     });
   };
@@ -207,7 +227,9 @@ function ImportDialog({ open, setOpen, existing, onDone }: { open: boolean; setO
       await bulkInsertMilitares(valid.map((r) => ({
         posto: r.posto.trim().toUpperCase(),
         nome_guerra: r.nome_guerra.trim(),
-        telefone: r.telefone.trim(),
+        // formatBrazilPhone é chamado aqui para garantir formato canônico na importação.
+        // O campo já passou pela validação em validate(), então o resultado nunca é null aqui.
+        telefone: formatBrazilPhone(r.telefone)!,
       })));
       toast.success(`${valid.length} militar(es) importado(s)`);
       setRows([]); setOpen(false); onDone();
@@ -255,6 +277,10 @@ function ImportDialog({ open, setOpen, existing, onDone }: { open: boolean; setO
                       <td className="px-2 py-1">
                         <Input className="h-8" value={r.telefone} onChange={(e) => updateRow(i, { telefone: e.target.value })} />
                         {r._error && <div className="text-xs text-destructive flex items-center gap-1 mt-1"><AlertTriangle className="h-3 w-3" />{r._error}</div>}
+                        {/* Preview do número formatado para conferência antes de importar */}
+                        {!r._error && r.telefone && (
+                          <div className="text-xs text-muted-foreground mt-1">→ {formatBrazilPhone(r.telefone)}</div>
+                        )}
                       </td>
                       <td className="px-2 py-1 text-right">
                         <Button size="icon" variant="ghost" onClick={() => removeRow(i)}><Trash2 className="h-4 w-4" /></Button>
