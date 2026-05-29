@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { formatBrazilPhone } from "@/lib/format";
 
 export type Militar = {
   id: string;
@@ -149,14 +150,19 @@ export async function listMilitares() {
 }
 
 export async function upsertMilitar(m: Partial<Militar> & { nome_guerra: string; posto: string; telefone: string }) {
+  // Normaliza o telefone para o padrão canônico "+55 DD NNNNNNNNN" antes de persistir.
+  // Se o número for inválido, lança erro para que o formulário trate adequadamente.
+  const telefone = formatBrazilPhone(m.telefone);
+  if (!telefone) throw new Error("Telefone inválido. Use o formato: (92) 99117-6452");
+
   if (m.id) {
     const { error } = await supabase.from("militares").update({
-      nome_guerra: m.nome_guerra, posto: m.posto, telefone: m.telefone, ativo: m.ativo ?? true,
+      nome_guerra: m.nome_guerra, posto: m.posto, telefone, ativo: m.ativo ?? true,
     }).eq("id", m.id);
     if (error) throw error;
   } else {
     const { error } = await supabase.from("militares").insert({
-      nome_guerra: m.nome_guerra, posto: m.posto, telefone: m.telefone, ativo: m.ativo ?? true,
+      nome_guerra: m.nome_guerra, posto: m.posto, telefone, ativo: m.ativo ?? true,
     });
     if (error) throw error;
   }
@@ -164,7 +170,15 @@ export async function upsertMilitar(m: Partial<Militar> & { nome_guerra: string;
 
 export async function bulkInsertMilitares(rows: { nome_guerra: string; posto: string; telefone: string }[]) {
   if (!rows.length) return;
-  const { error } = await supabase.from("militares").insert(rows);
+  // Normaliza todos os telefones antes do insert em lote.
+  // Linhas com telefone inválido lançam erro (o ImportDialog já filtra antes de chamar esta função,
+  // mas mantemos a validação aqui como segunda camada de segurança).
+  const normalized = rows.map((r) => {
+    const telefone = formatBrazilPhone(r.telefone);
+    if (!telefone) throw new Error(`Telefone inválido para ${r.nome_guerra}: "${r.telefone}"`);
+    return { ...r, telefone };
+  });
+  const { error } = await supabase.from("militares").insert(normalized);
   if (error) throw error;
 }
 
