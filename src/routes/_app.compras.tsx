@@ -29,6 +29,7 @@ function ComprasPage() {
   const [mes, setMes] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Compra | null>(null);
 
   const range = useMemo(() => {
