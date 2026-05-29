@@ -55,7 +55,7 @@ function ConfigPage() {
 
         <Card className="p-5 space-y-4">
           <h3 className="font-semibold">Mensagem de cobrança</h3>
-          <p className="text-xs text-muted-foreground">Variáveis: <code>{`{nome}`}</code> <code>{`{mes}`}</code> <code>{`{valor}`}</code> <code>{`{resumo}`}</code> <code>{`{pix}`}</code></p>
+          <p className="text-xs text-muted-foreground">Variáveis: <code>{`{nome}`}</code> <code>{`{mes}`}</code> <code>{`{valor}`}</code> <code>{`{resumo}`}</code> <code>{`{observacoes}`}</code> <code>{`{pix}`}</code></p>
           <Textarea rows={8} value={form.mensagem_template} onChange={(e) => set("mensagem_template", e.target.value)} />
           <div className="grid md:grid-cols-2 gap-3">
             <div><Label>Frequência (dias entre lembretes)</Label><Input type="number" min={1} value={form.frequencia_cobranca_dias} onChange={(e) => set("frequencia_cobranca_dias", Number(e.target.value))} /></div>
