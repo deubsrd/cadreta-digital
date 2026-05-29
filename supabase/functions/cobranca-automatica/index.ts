@@ -169,6 +169,7 @@ Deno.serve(async (req: Request) => {
         mes: periodoLabel,
         valor: brl(f.total).replace("R$\u00a0",""),
         resumo: f.itens.join("\n"),
+        observacoes: f.observacoes.join("\n") || "",
         pix: pixBlock,
       };
       const msg = Object.entries(vars).reduce((s,[k,v]) => s.replaceAll(`{${k}}`, v), cfg.mensagem_template ?? "");
