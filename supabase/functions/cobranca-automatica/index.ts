@@ -90,11 +90,14 @@ Deno.serve(async (req: Request) => {
       admin.from("pix_cobrancas").select("*").eq("periodo", periodo),
     ]);
 
-    const totalsByMil = new Map<string, { total: number; itens: string[] }>();
+    const totalsByMil = new Map<string, { total: number; itens: string[]; observacoes: string[] }>();
     for (const c of (compras ?? [])) {
-      const cur = totalsByMil.get(c.militar_id) ?? { total: 0, itens: [] };
+      const cur = totalsByMil.get(c.militar_id) ?? { total: 0, itens: [], observacoes: [] };
       cur.total += Number(c.valor);
       cur.itens.push(`${new Date(c.data_compra+"T00:00").toLocaleDateString("pt-BR")} — ${c.itens} (${brl(Number(c.valor))})`);
+      if (c.observacoes && String(c.observacoes).trim()) {
+        cur.observacoes.push(`${new Date(c.data_compra+"T00:00").toLocaleDateString("pt-BR")} — obs: ${c.observacoes}`);
+      }
       totalsByMil.set(c.militar_id, cur);
     }
 
@@ -166,6 +169,7 @@ Deno.serve(async (req: Request) => {
         mes: periodoLabel,
         valor: brl(f.total).replace("R$\u00a0",""),
         resumo: f.itens.join("\n"),
+        observacoes: f.observacoes.join("\n") || "",
         pix: pixBlock,
       };
       const msg = Object.entries(vars).reduce((s,[k,v]) => s.replaceAll(`{${k}}`, v), cfg.mensagem_template ?? "");
