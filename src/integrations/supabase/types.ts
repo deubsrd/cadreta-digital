@@ -14,6 +14,81 @@ export type Database = {
   }
   public: {
     Tables: {
+      cobranca_agendamentos: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          executado_at: string | null
+          id: number
+          intervalo_max: number
+          intervalo_min: number
+          scheduled_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          executado_at?: string | null
+          id?: number
+          intervalo_max?: number
+          intervalo_min?: number
+          scheduled_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          executado_at?: string | null
+          id?: number
+          intervalo_max?: number
+          intervalo_min?: number
+          scheduled_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cobranca_logs: {
+        Row: {
+          agendamento_id: number
+          enviado_at: string
+          erro_msg: string | null
+          id: string
+          militar_id: string
+          status: string
+        }
+        Insert: {
+          agendamento_id: number
+          enviado_at?: string
+          erro_msg?: string | null
+          id?: string
+          militar_id: string
+          status?: string
+        }
+        Update: {
+          agendamento_id?: number
+          enviado_at?: string
+          erro_msg?: string | null
+          id?: string
+          militar_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_logs_agendamento_id_fkey"
+            columns: ["agendamento_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_agendamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_logs_militar_id_fkey"
+            columns: ["militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       compras: {
         Row: {
           created_at: string
@@ -64,81 +139,6 @@ export type Database = {
           },
           {
             foreignKeyName: "compras_militar_id_fkey"
-            columns: ["militar_id"]
-            isOneToOne: false
-            referencedRelation: "militares"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      cobranca_agendamentos: {
-        Row: {
-          id: number
-          ativo: boolean
-          scheduled_at: string | null
-          intervalo_min: number
-          intervalo_max: number
-          executado_at: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: number
-          ativo?: boolean
-          scheduled_at?: string | null
-          intervalo_min?: number
-          intervalo_max?: number
-          executado_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: number
-          ativo?: boolean
-          scheduled_at?: string | null
-          intervalo_min?: number
-          intervalo_max?: number
-          executado_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      cobranca_logs: {
-        Row: {
-          id: string
-          agendamento_id: number
-          militar_id: string
-          status: string
-          erro_msg: string | null
-          enviado_at: string
-        }
-        Insert: {
-          id?: string
-          agendamento_id: number
-          militar_id: string
-          status?: string
-          erro_msg?: string | null
-          enviado_at?: string
-        }
-        Update: {
-          id?: string
-          agendamento_id?: number
-          militar_id?: string
-          status?: string
-          erro_msg?: string | null
-          enviado_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cobranca_logs_agendamento_id_fkey"
-            columns: ["agendamento_id"]
-            isOneToOne: false
-            referencedRelation: "cobranca_agendamentos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cobranca_logs_militar_id_fkey"
             columns: ["militar_id"]
             isOneToOne: false
             referencedRelation: "militares"
