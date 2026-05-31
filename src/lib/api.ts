@@ -102,6 +102,26 @@ export type Configuracoes = {
   z_api_client_token: string;
   proxima_cobranca: string | null;
   mp_access_token: string;
+  admin_phone: string;
+};
+
+export type CobrancaAgendamento = {
+  id: number;
+  ativo: boolean;
+  scheduled_at: string | null;  // ISO timestamptz
+  intervalo_min: number;
+  intervalo_max: number;
+  executado_at: string | null;
+  updated_at: string;
+};
+
+export type CobrancaLog = {
+  id: string;
+  agendamento_id: number;
+  militar_id: string;
+  status: "enviado" | "pulado_pago" | "erro";
+  erro_msg: string | null;
+  enviado_at: string;
 };
 
 export type PixCobranca = {
@@ -242,4 +262,35 @@ export async function getConfig() {
 export async function saveConfig(c: Partial<Configuracoes>) {
   const { error } = await supabase.from("configuracoes").update(c).eq("id", 1);
   if (error) throw error;
+}
+
+// ─── Cobrança agendada ────────────────────────────────────────────────────────
+
+export async function listAgendamentos() {
+  const { data, error } = await supabase
+    .from("cobranca_agendamentos")
+    .select("*")
+    .order("id", { ascending: true });
+  if (error) throw error;
+  return data as CobrancaAgendamento[];
+}
+
+export async function saveAgendamento(ag: Partial<CobrancaAgendamento> & { id: number }) {
+  const { error } = await supabase
+    .from("cobranca_agendamentos")
+    .update(ag)
+    .eq("id", ag.id);
+  if (error) throw error;
+}
+
+export async function listCobrancaLogs(agendamento_id?: number) {
+  let q = supabase
+    .from("cobranca_logs")
+    .select("*, militares(posto, nome_guerra)")
+    .order("enviado_at", { ascending: false })
+    .limit(100);
+  if (agendamento_id) q = q.eq("agendamento_id", agendamento_id);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data as (CobrancaLog & { militares: { posto: string; nome_guerra: string } | null })[];
 }

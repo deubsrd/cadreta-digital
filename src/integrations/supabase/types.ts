@@ -71,8 +71,84 @@ export type Database = {
           },
         ]
       }
+      cobranca_agendamentos: {
+        Row: {
+          id: number
+          ativo: boolean
+          scheduled_at: string | null
+          intervalo_min: number
+          intervalo_max: number
+          executado_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          ativo?: boolean
+          scheduled_at?: string | null
+          intervalo_min?: number
+          intervalo_max?: number
+          executado_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          ativo?: boolean
+          scheduled_at?: string | null
+          intervalo_min?: number
+          intervalo_max?: number
+          executado_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cobranca_logs: {
+        Row: {
+          id: string
+          agendamento_id: number
+          militar_id: string
+          status: string
+          erro_msg: string | null
+          enviado_at: string
+        }
+        Insert: {
+          id?: string
+          agendamento_id: number
+          militar_id: string
+          status?: string
+          erro_msg?: string | null
+          enviado_at?: string
+        }
+        Update: {
+          id?: string
+          agendamento_id?: number
+          militar_id?: string
+          status?: string
+          erro_msg?: string | null
+          enviado_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_logs_agendamento_id_fkey"
+            columns: ["agendamento_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_agendamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_logs_militar_id_fkey"
+            columns: ["militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       configuracoes: {
         Row: {
+          admin_phone: string | null
           frequencia_cobranca_dias: number
           horario_cobranca: string
           id: number
@@ -87,6 +163,7 @@ export type Database = {
           z_api_token: string | null
         }
         Insert: {
+          admin_phone?: string | null
           frequencia_cobranca_dias?: number
           horario_cobranca?: string
           id?: number
@@ -101,6 +178,7 @@ export type Database = {
           z_api_token?: string | null
         }
         Update: {
+          admin_phone?: string | null
           frequencia_cobranca_dias?: number
           horario_cobranca?: string
           id?: number

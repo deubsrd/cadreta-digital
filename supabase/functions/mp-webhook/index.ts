@@ -1,8 +1,37 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-// Webhook público do Mercado Pago. Valida assinatura quando MP_WEBHOOK_SECRET estiver definido.
+function onlyDigits(s: string) { return (s ?? "").replace(/\D+/g, ""); }
+function brl(n: number) { return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function phoneForZApi(raw: string): string {
+  let d = onlyDigits(raw);
+  if (d.startsWith("55") && d.length > 11) d = d.slice(2);
+  if (d.length < 10 || d.length > 11) return onlyDigits(raw);
+  return `55${d}`;
+}
+
+async function notificarAdmin(cfg: any, militar: any, valor: number, periodo: string) {
+  if (!cfg?.z_api_instance || !cfg?.z_api_token || !cfg?.admin_phone) return;
+  const mesLabel = new Date(periodo + "T00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const msg = `✅ *Pagamento recebido!*\n${militar?.posto ?? ""} ${militar?.nome_guerra ?? "Desconhecido"}\n${brl(valor)} — ${mesLabel}`;
+  try {
+    await fetch(
+      `https://api.z-api.io/instances/${cfg.z_api_instance}/token/${cfg.z_api_token}/send-text`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cfg.z_api_client_token ? { "Client-Token": cfg.z_api_client_token } : {}),
+        },
+        body: JSON.stringify({ phone: phoneForZApi(cfg.admin_phone), message: msg }),
+      }
+    );
+  } catch (e) {
+    console.error("notificarAdmin error", e);
+  }
+}
+
 Deno.serve(async (req: Request) => {
-  if (req.method === "GET") return new Response("ok"); // health check
+  if (req.method === "GET") return new Response("ok");
   try {
     const url = new URL(req.url);
     const bodyText = await req.text();
@@ -11,7 +40,7 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Validação opcional de assinatura MP (x-signature: ts=...,v1=...)
+    // Validação opcional de assinatura MP
     const secret = Deno.env.get("MP_WEBHOOK_SECRET");
     const xSig = req.headers.get("x-signature");
     const xReq = req.headers.get("x-request-id");
@@ -31,8 +60,7 @@ Deno.serve(async (req: Request) => {
     const paymentId = String(payload?.data?.id ?? dataIdQ ?? "");
     if (!paymentId) return new Response("missing payment id");
 
-    // Busca config token
-    const { data: cfg } = await admin.from("configuracoes").select("mp_access_token").eq("id", 1).maybeSingle();
+    const { data: cfg } = await admin.from("configuracoes").select("*").eq("id", 1).maybeSingle();
     const token = cfg?.mp_access_token?.trim();
     if (!token) return new Response("no token", { status: 500 });
 
@@ -42,7 +70,6 @@ Deno.serve(async (req: Request) => {
     if (!mpResp.ok) return new Response(`mp ${mpResp.status}`, { status: 200 });
     const pay = await mpResp.json();
 
-    // Localiza cobrança pelo external_reference (txid) ou mp_payment_id
     const txid = pay.external_reference;
     let { data: cobr } = await admin.from("pix_cobrancas").select("*").eq("txid", txid).maybeSingle();
     if (!cobr) {
@@ -50,16 +77,12 @@ Deno.serve(async (req: Request) => {
     }
     if (!cobr) return new Response("cobranca não encontrada");
 
-    const status = pay.status; // approved, pending, rejected, refunded, cancelled
+    const status = pay.status;
     const paid = Number(pay.transaction_amount);
     const expected = Number(cobr.valor);
     const needs_review = status === "approved" && Math.abs(paid - expected) > 0.01;
 
-    const update: Record<string, unknown> = {
-      mp_payment_id: paymentId,
-      raw: pay,
-      paid_amount: paid,
-    };
+    const update: Record<string, unknown> = { mp_payment_id: paymentId, raw: pay, paid_amount: paid };
     if (status === "approved") {
       update.status = needs_review ? "review" : "paid";
       update.paid_at = pay.date_approved ?? new Date().toISOString();
@@ -71,7 +94,6 @@ Deno.serve(async (req: Request) => {
     }
     await admin.from("pix_cobrancas").update(update).eq("id", cobr.id);
 
-    // Marca fatura como paga automaticamente quando aprovado e valor confere
     if (status === "approved" && !needs_review) {
       await admin.from("pagamentos").upsert({
         militar_id: cobr.militar_id,
@@ -79,6 +101,10 @@ Deno.serve(async (req: Request) => {
         valor: paid,
         observacoes: `PIX automático MP #${paymentId}`,
       }, { onConflict: "militar_id,periodo" });
+
+      // Notifica admin via WhatsApp
+      const { data: militar } = await admin.from("militares").select("*").eq("id", cobr.militar_id).maybeSingle();
+      await notificarAdmin(cfg, militar, paid, cobr.periodo);
     }
 
     return new Response("ok");
