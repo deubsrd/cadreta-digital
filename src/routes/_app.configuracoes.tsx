@@ -321,14 +321,6 @@ function ConfigPage() {
         <AgendamentosSection />
       </div>
 
-      <div className="text-xs text-muted-foreground bg-muted/50 rounded p-3 space-y-1">
-        <div className="font-medium">⚙️ Ativando pg_cron (necessário para execução automática)</div>
-        <div>1. No painel Supabase → <strong>Database → Extensions</strong> → ative <code>pg_cron</code> e <code>pg_net</code></div>
-        <div>2. Execute no SQL Editor:</div>
-        <code className="block bg-background p-2 rounded mt-1 break-all">
-          {`SELECT cron.schedule('cadreta-cobranca-scheduler','* * * * *', $$SELECT net.http_post(url:='${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cobranca-scheduler',headers:='{\"Authorization\":\"Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}\"}'::jsonb,body:='{}'::jsonb);$$);`}
-        </code>
-      </div>
     </div>
   );
 }
