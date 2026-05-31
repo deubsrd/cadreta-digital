@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.cobranca-automatica]
 verify_jwt = false
+
+[functions.cobranca-scheduler]
+verify_jwt = false
