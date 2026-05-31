@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, Loader2, ExternalLink } from "lucide-react";
+import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, Loader2, ExternalLink, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import jsPDF from "jspdf";
@@ -27,6 +28,10 @@ function FaturasPage() {
   const today = new Date();
   const [mes, setMes] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
   const [filter, setFilter] = useState<"todos" | "pendentes" | "pagos">("todos");
+
+  // Filtros novos
+  const [buscaNome, setBuscaNome] = useState("");
+  const [buscaPosto, setBuscaPosto] = useState("todos");
 
   const range = useMemo(() => {
     const [y, m] = mes.split("-").map(Number);
@@ -68,7 +73,33 @@ function FaturasPage() {
     }).sort((a, b) => (a.militar?.nome_guerra ?? "").localeCompare(b.militar?.nome_guerra ?? ""));
   }, [compras, pagamentos, militares, pixList, range.periodo]);
 
-  const filtered = faturas.filter((f) => filter === "todos" ? true : filter === "pagos" ? !!f.pago : !f.pago);
+  // Lista de postos únicos para o select
+  const postosDisponiveis = useMemo(() => {
+    const postos = new Set(faturas.map((f) => f.militar?.posto ?? "").filter(Boolean));
+    return [...postos].sort();
+  }, [faturas]);
+
+  const filtered = faturas.filter((f) => {
+    if (filter === "pagos" && !f.pago) return false;
+    if (filter === "pendentes" && !!f.pago) return false;
+    if (buscaNome.trim()) {
+      const q = buscaNome.trim().toLowerCase();
+      const nomeGuerra = f.militar?.nome_guerra?.toLowerCase() ?? "";
+      const posto = f.militar?.posto?.toLowerCase() ?? "";
+      if (!nomeGuerra.includes(q) && !posto.includes(q)) return false;
+    }
+    if (buscaPosto && buscaPosto !== "todos") {
+      if (f.militar?.posto !== buscaPosto) return false;
+    }
+    return true;
+  });
+
+  const temFiltroAtivo = buscaNome.trim() !== "" || buscaPosto !== "todos";
+
+  const limparFiltros = () => {
+    setBuscaNome("");
+    setBuscaPosto("todos");
+  };
 
   const [pixDialog, setPixDialog] = useState<{ pix: PixCobranca; nome: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -108,7 +139,6 @@ function FaturasPage() {
     if (config.z_api_instance && config.z_api_token) {
       try {
         const { data, error } = await supabase.functions.invoke("send-whatsapp", {
-          // Envia apenas os dígitos: a Edge Function send-whatsapp reconstrói o formato correto para a Z-API.
           body: { phone: onlyDigits(formatBrazilPhone(f.militar?.telefone ?? "") ?? f.militar?.telefone ?? ""), message: msg },
         });
         if (error) throw error;
@@ -119,7 +149,6 @@ function FaturasPage() {
         toast.error(`Falha Z-API: ${e.message}. Abrindo WhatsApp manual.`);
       }
     }
-    // O wa.me aceita DDI+DDD+número sem formatação: "5592991176452"
     const phoneDigits = onlyDigits(formatBrazilPhone(f.militar?.telefone ?? "") ?? f.militar?.telefone ?? "");
     const url = `https://wa.me/${phoneDigits}?text=${encodeURIComponent(msg)}`;
     window.open(url, "_blank");
@@ -151,6 +180,43 @@ function FaturasPage() {
           <Button variant="outline" onClick={exportPdf}><FileDown className="h-4 w-4 mr-2" />PDF</Button>
         </div>
       </div>
+
+      {/* Filtros de busca */}
+      <Card className="p-4">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex-1 min-w-[180px]">
+            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1 block">Buscar por nome</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Nome de guerra..."
+                value={buscaNome}
+                onChange={(e) => setBuscaNome(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </div>
+          <div className="min-w-[160px]">
+            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1 block">Posto / Graduação</label>
+            <Select value={buscaPosto} onValueChange={setBuscaPosto}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todos os postos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os postos</SelectItem>
+                {postosDisponiveis.map((p) => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {temFiltroAtivo && (
+            <Button variant="ghost" size="sm" onClick={limparFiltros} className="text-muted-foreground">
+              <X className="h-4 w-4 mr-1" />Limpar filtros
+            </Button>
+          )}
+        </div>
+      </Card>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <Card className="p-4"><div className="text-xs text-muted-foreground uppercase">Pendente</div><div className="text-2xl font-semibold mt-1 text-destructive">{brl(totalPendente)}</div></Card>
@@ -209,7 +275,11 @@ function FaturasPage() {
             </div>
           </Card>
         ))}
-        {filtered.length === 0 && <Card className="p-8 text-center text-muted-foreground">Nenhuma fatura nesta seleção.</Card>}
+        {filtered.length === 0 && (
+          <Card className="p-8 text-center text-muted-foreground">
+            {temFiltroAtivo ? "Nenhuma fatura encontrada com esses filtros." : "Nenhuma fatura nesta seleção."}
+          </Card>
+        )}
       </div>
 
       <Dialog open={!!pixDialog} onOpenChange={(o) => !o && setPixDialog(null)}>
