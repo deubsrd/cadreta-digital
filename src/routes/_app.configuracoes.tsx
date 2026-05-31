@@ -8,11 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CalendarIcon, Bell, Clock, CheckCircle2, AlertCircle, Loader2, Zap } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Bell, Clock, CheckCircle2, AlertCircle, Loader2, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -95,7 +92,7 @@ function AgendamentosSection() {
     <>
       <div className="space-y-3">
         {localAgs.map((ag) => (
-          <Card key={ag.id} className={cn("p-4", !ag.ativo && "opacity-60")}>
+          <Card key={ag.id} className={`p-4${!ag.ativo ? " opacity-60" : ""}`}>
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
               <div className="flex items-center gap-3">
                 <span className="h-7 w-7 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-semibold">{ag.id}</span>
@@ -234,29 +231,6 @@ function ConfigPage() {
           <h3 className="font-semibold">Mensagem de cobrança</h3>
           <p className="text-xs text-muted-foreground">Variáveis: <code>{`{nome}`}</code> <code>{`{mes}`}</code> <code>{`{valor}`}</code> <code>{`{resumo}`}</code> <code>{`{observacoes}`}</code> <code>{`{pix}`}</code></p>
           <Textarea rows={8} value={form.mensagem_template} onChange={(e) => set("mensagem_template", e.target.value)} />
-          <div className="grid md:grid-cols-2 gap-3">
-            <div><Label>Frequência (dias entre lembretes)</Label><Input type="number" min={1} value={form.frequencia_cobranca_dias} onChange={(e) => set("frequencia_cobranca_dias", Number(e.target.value))} /></div>
-            <div><Label>Horário das mensagens</Label><Input type="time" value={form.horario_cobranca?.slice(0, 5) ?? "09:00"} onChange={(e) => set("horario_cobranca", e.target.value)} /></div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label>Próxima cobrança (legado)</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button type="button" variant="outline" className={cn("w-full md:w-[280px] justify-start text-left font-normal", !form.proxima_cobranca && "text-muted-foreground")}>
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {form.proxima_cobranca ? new Date(form.proxima_cobranca + "T00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" }) : "Selecionar data"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={form.proxima_cobranca ? new Date(form.proxima_cobranca + "T00:00") : undefined}
-                  onSelect={(d) => {
-                    if (!d) { set("proxima_cobranca", null); return; }
-                    set("proxima_cobranca", `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);
-                  }} initialFocus className={cn("p-3 pointer-events-auto")} />
-              </PopoverContent>
-            </Popover>
-            {form.proxima_cobranca && (<button type="button" className="text-xs text-muted-foreground hover:text-foreground self-start" onClick={() => set("proxima_cobranca", null)}>Limpar data</button>)}
-          </div>
         </Card>
 
         {/* Z-API */}
