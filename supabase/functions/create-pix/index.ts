@@ -22,6 +22,15 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
+    // Verifica role de admin
+    const { data: roleRow } = await admin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!roleRow) return j({ error: "Acesso negado" }, 403);
+
     // Reusa cobrança existente ainda pendente
     const { data: existing } = await admin.from("pix_cobrancas")
       .select("*").eq("militar_id", militar_id).eq("periodo", periodo).maybeSingle();

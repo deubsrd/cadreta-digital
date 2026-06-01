@@ -61,6 +61,26 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
+    // Autenticação: aceita scheduler secret (pg_cron) OU usuário admin (UI)
+    const schedSecret = Deno.env.get("SCHEDULER_SECRET");
+    const headerSecret = req.headers.get("x-scheduler-secret");
+    const isScheduler = !!schedSecret && headerSecret === schedSecret;
+
+    if (!isScheduler) {
+      const authHeader = req.headers.get("Authorization") ?? "";
+      const userClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) return j({ error: "Não autorizado" }, 401);
+      const { data: roleRow } = await admin
+        .from("user_roles").select("role")
+        .eq("user_id", user.id).eq("role", "admin").maybeSingle();
+      if (!roleRow) return j({ error: "Acesso negado" }, 403);
+    }
+
     const { data: cfg } = await admin.from("configuracoes").select("*").eq("id", 1).maybeSingle();
     if (!cfg) return j({ error: "Sem configuração" }, 400);
 
