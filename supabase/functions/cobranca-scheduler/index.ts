@@ -44,6 +44,17 @@ const corsHeaders = {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Autenticação: shared secret obrigatório (chamado pelo pg_cron)
+  const expected = Deno.env.get("SCHEDULER_SECRET");
+  if (!expected) {
+    return new Response(JSON.stringify({ error: "SCHEDULER_SECRET não configurado" }), {
+      status: 500, headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }
+  if (req.headers.get("x-scheduler-secret") !== expected) {
+    return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+  }
+
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
