@@ -1,6 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-// ─── helpers ───────────────────────────────────────────────────────────────
+// ─── helpers ────────────────────────────────────────────────────────────────
 function brl(n: number) { return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function onlyDigits(s: string) { return (s ?? "").replace(/\D+/g, ""); }
 function ymd(d: Date) {
@@ -16,10 +16,10 @@ function militarLabel(m: any) { return m ? `${m.posto} ${m.nome_guerra}` : "Desc
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 function randInt(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
-// Pequenas variações de texto para cada cobrança (evita mensagem idêntica repetida)
+// Variação sutil de texto por tentativa (anti-bloqueio Z-API)
 function humanizeTemplate(template: string, tentativa: number): string {
   const prefixes = [
-    "", // cobrança 1: sem prefixo extra
+    "",
     "Lembrando que ",
     "Passando para avisar: ",
     "⚠️ Ainda consta em aberto: ",
@@ -27,9 +27,13 @@ function humanizeTemplate(template: string, tentativa: number): string {
   ];
   const prefix = prefixes[Math.min(tentativa - 1, prefixes.length - 1)];
   if (!prefix) return template;
-  // Insere o prefixo no início da primeira linha não-vazia
   return template.replace(/^(\s*)(.)/m, `$1${prefix}$2`);
 }
+
+// Limite de segurança: para o loop se estiver perto do timeout da Edge Function
+// Supabase tem limite de ~400s; usamos 350s como margem de segurança
+const START_TIME = Date.now();
+function nearTimeout() { return Date.now() - START_TIME > 350_000; }
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,11 +68,10 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // 2. Carrega dados necessários uma vez só
-    const now = nowUtc;
-    const periodo = ymd(new Date(now.getFullYear(), now.getMonth(), 1));
+    // 2. Carrega dados necessários uma única vez
+    const periodo = ymd(new Date(nowUtc.getFullYear(), nowUtc.getMonth(), 1));
     const fromDate = periodo;
-    const toDate = ymd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    const toDate = ymd(new Date(nowUtc.getFullYear(), nowUtc.getMonth() + 1, 0));
 
     const [
       { data: cfg },
@@ -84,61 +87,86 @@ Deno.serve(async (req: Request) => {
       admin.from("pix_cobrancas").select("*").eq("periodo", periodo),
     ]);
 
-    if (!cfg) throw new Error("Sem configuração");
+    if (!cfg) throw new Error("Sem configuração no banco");
 
-    const periodoLabel = new Date(periodo + "T00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    const periodoLabel = new Date(periodo + "T12:00:00Z").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
     // Monta totais por militar
     const totalsByMil = new Map<string, { total: number; itens: string[] }>();
     for (const c of compras ?? []) {
       const cur = totalsByMil.get(c.militar_id) ?? { total: 0, itens: [] };
       cur.total += Number(c.valor);
-      cur.itens.push(`${new Date(c.data_compra + "T00:00").toLocaleDateString("pt-BR")} — ${c.itens} (${brl(Number(c.valor))})`);
+      cur.itens.push(`${new Date(c.data_compra + "T12:00:00Z").toLocaleDateString("pt-BR")} — ${c.itens} (${brl(Number(c.valor))})`);
       totalsByMil.set(c.militar_id, cur);
     }
 
     const pagosIds = new Set((pagamentos ?? []).map((p: any) => p.militar_id));
 
-    // Filtra inadimplentes
+    // Inadimplentes = têm compras fiado E não pagaram no período
     const inadimplentes = (militares ?? []).filter((m: any) => {
       const f = totalsByMil.get(m.id);
       return f && f.total > 0 && !pagosIds.has(m.id);
     });
 
-    const zapiOk = cfg.z_api_instance && cfg.z_api_token;
-
-    // 3. Para cada agendamento pendente, dispara as mensagens
+    const zapiOk = !!(cfg.z_api_instance && cfg.z_api_token);
     const resultsByAg: Record<number, any> = {};
 
+    // 3. Processa cada agendamento pendente
     for (const ag of agendamentos) {
-      const tentativa = ag.id; // id 1–5 = tentativa 1–5
-      const minSeg = ag.intervalo_min ?? 30;
-      const maxSeg = ag.intervalo_max ?? 120;
+      if (nearTimeout()) {
+        console.warn(`Timeout protection: pulando agendamento ${ag.id}`);
+        break;
+      }
+
+      const tentativa = ag.id; // id 1–5 representa a tentativa
+      const minSeg = Math.max(10, ag.intervalo_min ?? 30);
+      const maxSeg = Math.max(minSeg + 5, ag.intervalo_max ?? 120);
       const logs: any[] = [];
 
-      // Marca como executado ANTES de começar (evita duplo disparo se a função demorar > 1 min)
-      await admin.from("cobranca_agendamentos")
+      // Marca como executado IMEDIATAMENTE para evitar duplo disparo
+      // (caso pg_cron chame a função novamente antes de terminar)
+      const { error: markErr } = await admin
+        .from("cobranca_agendamentos")
         .update({ executado_at: nowUtc.toISOString() })
         .eq("id", ag.id);
 
+      if (markErr) {
+        console.error(`Falha ao marcar agendamento ${ag.id}:`, markErr);
+        continue;
+      }
+
       for (let i = 0; i < inadimplentes.length; i++) {
+        if (nearTimeout()) {
+          console.warn(`Timeout protection: interrompendo loop no militar ${i + 1}/${inadimplentes.length}`);
+          break;
+        }
+
         const mil = inadimplentes[i] as any;
         const f = totalsByMil.get(mil.id)!;
 
-        // Verifica novamente se pagou enquanto o loop rodava
-        const { data: pgCheck } = await admin.from("pagamentos")
-          .select("id").eq("militar_id", mil.id).eq("periodo", periodo).maybeSingle();
+        // Reconfirma pagamento em tempo real (pode ter pago durante o loop)
+        const { data: pgCheck } = await admin
+          .from("pagamentos")
+          .select("id")
+          .eq("militar_id", mil.id)
+          .eq("periodo", periodo)
+          .maybeSingle();
+
         if (pgCheck) {
-          logs.push({ militar_id: mil.id, status: "pulado_pago" });
-          await admin.from("cobranca_logs").insert({ agendamento_id: ag.id, militar_id: mil.id, status: "pulado_pago" });
+          await admin.from("cobranca_logs").insert({
+            agendamento_id: ag.id,
+            militar_id: mil.id,
+            status: "pulado_pago",
+          });
+          logs.push({ status: "pulado_pago" });
           continue;
         }
 
-        // Busca/usa PIX existente
+        // Monta bloco PIX
         const pix = (pixList ?? []).find((p: any) => p.militar_id === mil.id) as any;
         const pixBlock = pix
           ? `\n📱 *PIX Copia e Cola:*\n${pix.copia_cola ?? ""}${pix.ticket_url ? `\n\n🔗 Link: ${pix.ticket_url}` : ""}\n\n_Confirmação automática após o pagamento._`
-          : `\nChave PIX: ${cfg.pix_key || "(configurar PIX)"}`;
+          : `\nChave PIX: ${cfg.pix_key || "(configurar PIX nas configurações)"}`;
 
         const vars: Record<string, string> = {
           nome: militarLabel(mil),
@@ -148,8 +176,10 @@ Deno.serve(async (req: Request) => {
           pix: pixBlock,
         };
 
-        const templateComVariacao = humanizeTemplate(cfg.mensagem_template ?? "", tentativa);
-        const msg = Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, v), templateComVariacao);
+        const msg = Object.entries(vars).reduce(
+          (s, [k, v]) => s.replaceAll(`{${k}}`, v),
+          humanizeTemplate(cfg.mensagem_template ?? "", tentativa)
+        );
 
         let status = "enviado";
         let erroMsg: string | null = null;
@@ -164,38 +194,57 @@ Deno.serve(async (req: Request) => {
                   "Content-Type": "application/json",
                   ...(cfg.z_api_client_token ? { "Client-Token": cfg.z_api_client_token } : {}),
                 },
-                body: JSON.stringify({ phone: phoneForZApi(mil.telefone ?? ""), message: msg }),
+                body: JSON.stringify({
+                  phone: phoneForZApi(mil.telefone ?? ""),
+                  message: msg,
+                }),
               }
             );
             if (!r.ok) {
-              erroMsg = `Z-API ${r.status}: ${(await r.text()).slice(0, 200)}`;
+              const body = await r.text();
+              erroMsg = `Z-API ${r.status}: ${body.slice(0, 200)}`;
               status = "erro";
+              console.error(`Z-API erro para ${militarLabel(mil)}: ${erroMsg}`);
             }
           } catch (e) {
             erroMsg = (e as Error).message;
             status = "erro";
           }
+        } else {
+          // Z-API não configurada — loga como enviado sem enviar
+          status = "sem_zapi";
+          erroMsg = "Z-API não configurada";
         }
 
-        logs.push({ militar_id: mil.id, status, erroMsg });
-        await admin.from("cobranca_logs").insert({
+        // Salva log imediatamente após cada envio
+        const { error: logErr } = await admin.from("cobranca_logs").insert({
           agendamento_id: ag.id,
           militar_id: mil.id,
           status,
           erro_msg: erroMsg,
         });
 
+        if (logErr) console.error("Erro ao salvar log:", logErr);
+        logs.push({ status });
+
         // Delay aleatório entre mensagens (exceto após o último)
-        if (i < inadimplentes.length - 1) {
+        if (i < inadimplentes.length - 1 && !nearTimeout()) {
           const delaySeg = randInt(minSeg, maxSeg);
+          console.log(`Aguardando ${delaySeg}s antes do próximo envio...`);
           await sleep(delaySeg * 1000);
         }
       }
 
-      resultsByAg[ag.id] = { enviados: logs.filter((l) => l.status === "enviado").length, pulados: logs.filter((l) => l.status === "pulado_pago").length, erros: logs.filter((l) => l.status === "erro").length };
+      resultsByAg[ag.id] = {
+        total_inadimplentes: inadimplentes.length,
+        enviados: logs.filter((l) => l.status === "enviado").length,
+        pulados_pago: logs.filter((l) => l.status === "pulado_pago").length,
+        erros: logs.filter((l) => l.status === "erro").length,
+        sem_zapi: logs.filter((l) => l.status === "sem_zapi").length,
+      };
     }
 
-    return new Response(JSON.stringify({ ok: true, agendamentos: resultsByAg }), {
+    return new Response(JSON.stringify({ ok: true, periodo, agendamentos: resultsByAg }), {
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
 

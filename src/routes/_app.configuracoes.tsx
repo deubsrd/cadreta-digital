@@ -19,20 +19,26 @@ export const Route = createFileRoute("/_app/configuracoes")({
 });
 
 // Converte "2026-06-01T09:00" (local) → ISO UTC p/ salvar no banco
+// Converte data/hora do dispositivo → ISO UTC para salvar no banco
+// Usa o offset REAL do browser (não assume Brasília hardcoded)
 function localToIso(dateStr: string, timeStr: string): string | null {
   if (!dateStr || !timeStr) return null;
+  // new Date("YYYY-MM-DDTHH:MM:00") sem timezone = interpretado como LOCAL pelo browser
   const d = new Date(`${dateStr}T${timeStr}:00`);
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-// Converte ISO UTC → { date: "YYYY-MM-DD", time: "HH:MM" } em Brasília
+// Converte ISO UTC → { date: "YYYY-MM-DD", time: "HH:MM" } no fuso LOCAL do dispositivo
 function isoToLocal(iso: string | null): { date: string; time: string } {
   if (!iso) return { date: "", time: "" };
   const d = new Date(iso);
-  const br = new Date(d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-  const date = `${br.getFullYear()}-${String(br.getMonth() + 1).padStart(2, "0")}-${String(br.getDate()).padStart(2, "0")}`;
-  const time = `${String(br.getHours()).padStart(2, "0")}:${String(br.getMinutes()).padStart(2, "0")}`;
-  return { date, time };
+  // Usa o fuso real do dispositivo
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return { date: `${year}-${month}-${day}`, time: `${hours}:${minutes}` };
 }
 
 function AgStatusBadge({ ag }: { ag: any }) {
@@ -52,6 +58,8 @@ function AgendamentosSection() {
   const [logDialog, setLogDialog] = useState<number | null>(null);
   const { data: logs = [], isLoading: logsLoading } = useQuery({
     queryKey: ["cobranca_logs", logDialog],
+    staleTime: 0,
+    refetchOnMount: true,
     queryFn: () => listCobrancaLogs(logDialog ?? undefined),
     enabled: logDialog !== null,
   });
@@ -114,7 +122,7 @@ function AgendamentosSection() {
                 <Input type="date" value={ag._date} onChange={(e) => update(ag.id, { _date: e.target.value })} className="h-8 text-sm" />
               </div>
               <div>
-                <Label className="text-xs">Horário (Brasília)</Label>
+                <Label className="text-xs">Horário (horário local)</Label>
                 <Input type="time" value={ag._time} onChange={(e) => update(ag.id, { _time: e.target.value })} className="h-8 text-sm" />
               </div>
               <div>
