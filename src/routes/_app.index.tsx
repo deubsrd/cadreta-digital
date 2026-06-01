@@ -70,11 +70,19 @@ function Dashboard() {
     [preset, customFrom, customTo]
   );
 
-  const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares });
-  const { data: compras = [] } = useQuery({ queryKey: ["compras"], queryFn: () => listCompras() });
-  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos });
-  const { data: itens = [] } = useQuery({ queryKey: ["itens"], queryFn: listItens });
-  const { data: pixList = [] } = useQuery({ queryKey: ["pix_cobrancas"], queryFn: listPixCobrancas });
+  const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares, staleTime: 0 });
+  const { data: compras = [] } = useQuery({ queryKey: ["compras"], queryFn: () => listCompras(), staleTime: 0, refetchOnMount: true });
+  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos, staleTime: 0, refetchOnMount: true });
+  const { data: itens = [] } = useQuery({ queryKey: ["itens"], queryFn: listItens, staleTime: 0 });
+  const { data: pixList = [] } = useQuery({ queryKey: ["pix_cobrancas"], queryFn: listPixCobrancas, staleTime: 0 });
+
+  // Invalida cache ao montar — garante dados frescos após qualquer quebra de RLS
+  useEffect(() => {
+    qc.invalidateQueries({ queryKey: ["compras"] });
+    qc.invalidateQueries({ queryKey: ["pagamentos"] });
+    qc.invalidateQueries({ queryKey: ["militares"] });
+    qc.invalidateQueries({ queryKey: ["itens"] });
+  }, [qc]);
 
   useEffect(() => {
     const ch = supabase.channel("dash_pix")

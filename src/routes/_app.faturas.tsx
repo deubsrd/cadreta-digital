@@ -39,11 +39,11 @@ function FaturasPage() {
     return { from: ymd(startOfMonth(d)), to: ymd(endOfMonth(d)), periodo: ymd(startOfMonth(d)), date: d };
   }, [mes]);
 
-  const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares });
-  const { data: compras = [] } = useQuery({ queryKey: ["compras", range], queryFn: () => listCompras({ from: range.from, to: range.to }) });
-  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos });
-  const { data: config } = useQuery({ queryKey: ["config"], queryFn: getConfig });
-  const { data: pixList = [] } = useQuery({ queryKey: ["pix_cobrancas"], queryFn: listPixCobrancas });
+  const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares, staleTime: 0, refetchOnMount: true });
+  const { data: compras = [] } = useQuery({ queryKey: ["compras", range], queryFn: () => listCompras({ from: range.from, to: range.to }), staleTime: 0, refetchOnMount: true });
+  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos, staleTime: 0, refetchOnMount: true });
+  const { data: config } = useQuery({ queryKey: ["config"], queryFn: getConfig, staleTime: 0 });
+  const { data: pixList = [] } = useQuery({ queryKey: ["pix_cobrancas"], queryFn: listPixCobrancas, staleTime: 0 });
 
   // Realtime: atualiza quando webhook MP marcar como pago
   useEffect(() => {
