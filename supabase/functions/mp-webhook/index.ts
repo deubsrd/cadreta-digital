@@ -40,12 +40,19 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Validação opcional de assinatura MP
+    // Validação obrigatória de assinatura MP
     const secret = Deno.env.get("MP_WEBHOOK_SECRET");
+    if (!secret) {
+      console.error("MP_WEBHOOK_SECRET não configurado");
+      return new Response("Webhook secret not configured", { status: 500 });
+    }
     const xSig = req.headers.get("x-signature");
     const xReq = req.headers.get("x-request-id");
     const dataIdQ = url.searchParams.get("data.id") || url.searchParams.get("id");
-    if (secret && xSig && xReq) {
+    if (!xSig || !xReq) {
+      return new Response("missing signature headers", { status: 401 });
+    }
+    {
       const parts = Object.fromEntries(xSig.split(",").map((p) => p.trim().split("=")));
       const manifest = `id:${dataIdQ ?? payload?.data?.id ?? ""};request-id:${xReq};ts:${parts.ts};`;
       const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
