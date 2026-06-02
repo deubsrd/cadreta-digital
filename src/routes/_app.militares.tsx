@@ -41,7 +41,25 @@ function MilitaresPage() {
           <h1 className="text-2xl font-semibold">Militares</h1>
           <p className="text-sm text-muted-foreground">{militares.length} cadastrados</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={() => {
+            if (!militares.length) { toast.error("Nenhum militar para exportar"); return; }
+            const data = militares.map((m) => ({
+              "Posto/Graduação": m.posto,
+              "Nome de guerra": m.nome_guerra,
+              "Telefone": m.telefone,
+              "Status": m.ativo ? "Ativo" : "Inativo",
+            }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            ws["!cols"] = [{ wch: 16 }, { wch: 24 }, { wch: 20 }, { wch: 10 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Militares");
+            const date = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(wb, `militares_${date}.xlsx`);
+            toast.success("Planilha exportada");
+          }}>
+            <Download className="h-4 w-4 mr-2" /> Exportar planilha
+          </Button>
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="h-4 w-4 mr-2" /> Importar planilha
           </Button>
