@@ -202,7 +202,7 @@ function ConfigPage() {
 
   useEffect(() => { if (data && !form) setForm(data); }, [data, form]);
 
-  if (!form) return <div className="text-muted-foreground">Carregando...</div>;
+  if (!form) return <div className="text-muted-foreground p-4">Preparando configurações...</div>;
 
   const set = (k: string, v: any) => setForm({ ...form, [k]: v });
 

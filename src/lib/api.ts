@@ -269,11 +269,47 @@ export async function desmarcarPago(militar_id: string, periodo: string) {
   if (error) throw error;
 }
 
-export async function getConfig() {
+const DEFAULT_TEMPLATE = `Olá, {nome}. Sua fatura referente ao mês de {mes} já está disponível.\nValor total: R$ {valor}.\nResumo das compras:\n{resumo}\nPor favor realize o pagamento via PIX:\n{pix}\nApós o pagamento, envie o comprovante. Obrigado!`;
+
+export async function getConfig(): Promise<Configuracoes> {
   const uid = await getUid();
   const { data, error } = await supabase.from("configuracoes" as any).select("*").eq("user_id", uid).maybeSingle();
   if (error) throw error;
-  return data as Configuracoes | null;
+
+  // Se não existe ainda (usuário criado antes do trigger), provisiona agora
+  if (!data) {
+    const defaults = {
+      user_id: uid,
+      pix_key: "", pix_nome: "",
+      mensagem_template: DEFAULT_TEMPLATE,
+      frequencia_cobranca_dias: 3,
+      horario_cobranca: "09:00",
+      z_api_instance: "", z_api_token: "", z_api_client_token: "",
+      admin_phone: "", mp_access_token: "",
+    };
+    const { data: created, error: createErr } = await supabase
+      .from("configuracoes" as any)
+      .insert(defaults)
+      .select()
+      .maybeSingle();
+    if (createErr) throw createErr;
+
+    // Também provisiona 5 agendamentos se não existirem
+    const { data: ags } = await supabase.from("cobranca_agendamentos" as any).select("id").eq("user_id", uid).limit(1);
+    if (!ags || ags.length === 0) {
+      await supabase.from("cobranca_agendamentos" as any).insert([
+        { user_id: uid, ativo: false, scheduled_at: null, intervalo_min: 30, intervalo_max: 120 },
+        { user_id: uid, ativo: false, scheduled_at: null, intervalo_min: 30, intervalo_max: 120 },
+        { user_id: uid, ativo: false, scheduled_at: null, intervalo_min: 30, intervalo_max: 120 },
+        { user_id: uid, ativo: false, scheduled_at: null, intervalo_min: 30, intervalo_max: 120 },
+        { user_id: uid, ativo: false, scheduled_at: null, intervalo_min: 30, intervalo_max: 120 },
+      ]);
+    }
+
+    return created as unknown as Configuracoes;
+  }
+
+  return data as unknown as Configuracoes;
 }
 
 export async function saveConfig(c: Partial<Configuracoes>) {
