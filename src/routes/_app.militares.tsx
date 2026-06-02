@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { useMemo, useRef, useState } from "react";
-import { Plus, Pencil, Trash2, Search, Upload, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Upload, Download, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { onlyDigits, formatBrazilPhone, isValidBrazilPhone } from "@/lib/format";
 import * as XLSX from "xlsx";
