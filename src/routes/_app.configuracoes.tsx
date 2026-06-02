@@ -196,15 +196,16 @@ function AgendamentosSection() {
 
 function ConfigPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["config"], queryFn: getConfig });
-  const [form, setForm] = useState<any>(null);
+  const { data, isLoading } = useQuery({ queryKey: ["config"], queryFn: getConfig, staleTime: 0, refetchOnMount: true });
+  const [overrides, setOverrides] = useState<Record<string, any>>({});
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { if (data && !form) setForm(data); }, [data, form]);
+  // form = dados do banco + alterações locais ainda não salvas
+  const form = data ? { ...data, ...overrides } : null;
 
-  if (!form) return <div className="text-muted-foreground p-4">Preparando configurações...</div>;
+  if (isLoading || !form) return <div className="text-muted-foreground p-4">Carregando...</div>;
 
-  const set = (k: string, v: any) => setForm({ ...form, [k]: v });
+  const set = (k: string, v: any) => setOverrides((prev) => ({ ...prev, [k]: v }));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
