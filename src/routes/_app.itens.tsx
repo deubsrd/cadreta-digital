@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listItens, upsertItem, deleteItem, listItemPriceHistory, listCompras, type Item } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { brl, startOfMonth, ymd } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,17 +21,19 @@ export const Route = createFileRoute("/_app/itens")({
 
 function ItensPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const uid = user?.id ?? "";
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("todas");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
   const [historyFor, setHistoryFor] = useState<Item | null>(null);
 
-  const { data: itens = [] } = useQuery({ queryKey: ["itens"], queryFn: listItens });
+  const { data: itens = [] } = useQuery({ queryKey: ["itens", uid], queryFn: listItens });
 
   // estatísticas mensais
   const monthFrom = ymd(startOfMonth());
-  const { data: comprasMes = [] } = useQuery({ queryKey: ["compras-mes-itens", monthFrom], queryFn: () => listCompras({ from: monthFrom }) });
+  const { data: comprasMes = [] } = useQuery({ queryKey: ["compras-mes-itens", uid, monthFrom], queryFn: () => listCompras({ from: monthFrom }) });
   const stats = useMemo(() => {
     const map = new Map<string, { qtd: number; total: number }>();
     comprasMes.forEach((c) => {

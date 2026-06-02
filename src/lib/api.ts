@@ -366,7 +366,7 @@ export async function saveAgendamento(ag: Partial<CobrancaAgendamento> & { id: n
     .from("cobranca_agendamentos" as any)
     .update(ag)
     .eq("id", ag.id)
-    .eq("user_id", (await supabase.auth.getUser()).data.user!.id);
+    .eq("user_id", await getUid());
   if (error) throw error;
 }
 

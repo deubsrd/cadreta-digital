@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listMilitares, upsertMilitar, deleteMilitar, bulkInsertMilitares, militarLabel, type Militar } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,7 +21,9 @@ export const Route = createFileRoute("/_app/militares")({
 
 function MilitaresPage() {
   const qc = useQueryClient();
-  const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares });
+  const { user } = useAuth();
+  const uid = user?.id ?? "";
+  const { data: militares = [] } = useQuery({ queryKey: ["militares", uid], queryFn: listMilitares });
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Militar | null>(null);
   const [open, setOpen] = useState(false);

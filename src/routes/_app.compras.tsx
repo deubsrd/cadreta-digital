@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listCompras, listMilitares, listPagamentos, listItens, createComprasBulk, updateCompra, deleteCompra, militarLabel, type Compra, type Militar, type Item } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { brl, ymd, startOfMonth, endOfMonth } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,8 @@ type CartLine = { item: Item; qtd: number; pago_na_hora: boolean };
 
 function ComprasPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const uid = user?.id ?? "";
   const today = new Date();
   const [mes, setMes] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
   const [search, setSearch] = useState("");
@@ -38,10 +41,10 @@ function ComprasPage() {
     return { from: ymd(startOfMonth(d)), to: ymd(endOfMonth(d)) };
   }, [mes]);
 
-  const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares });
-  const { data: itens = [] } = useQuery({ queryKey: ["itens"], queryFn: listItens });
-  const { data: compras = [] } = useQuery({ queryKey: ["compras", range], queryFn: () => listCompras(range) });
-  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos });
+  const { data: militares = [] } = useQuery({ queryKey: ["militares", uid], queryFn: listMilitares });
+  const { data: itens = [] } = useQuery({ queryKey: ["itens", uid], queryFn: listItens });
+  const { data: compras = [] } = useQuery({ queryKey: ["compras", uid, range], queryFn: () => listCompras(range) });
+  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos", uid], queryFn: listPagamentos });
 
   const filtered = compras.filter((c) => {
     const s = search.toLowerCase();
@@ -146,8 +149,8 @@ function ComprasPage() {
         </div>
       </Card>
 
-      <PdvDialog open={open} setOpen={setOpen} editing={editing} militares={militares} itens={itens} compras={compras} pagamentos={pagamentos} onSaved={() => qc.invalidateQueries()} />
-      <ImportComprasDialog open={importOpen} setOpen={setImportOpen} militares={militares} onDone={() => qc.invalidateQueries({ queryKey: ["compras"] })} />
+      <PdvDialog open={open} setOpen={setOpen} editing={editing} militares={militares} itens={itens} compras={compras} pagamentos={pagamentos} onSaved={() => { qc.invalidateQueries({ queryKey: ["compras", uid] }); qc.invalidateQueries({ queryKey: ["pagamentos", uid] }); }} />
+      <ImportComprasDialog open={importOpen} setOpen={setImportOpen} militares={militares} onDone={() => qc.invalidateQueries({ queryKey: ["compras", uid] })} />
     </div>
   );
 }

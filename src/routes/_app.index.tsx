@@ -80,11 +80,12 @@ function Dashboard() {
 
   // Invalida cache ao montar — garante dados frescos após qualquer quebra de RLS
   useEffect(() => {
+    if (!uid) return;
     qc.invalidateQueries({ queryKey: ["compras", uid] });
     qc.invalidateQueries({ queryKey: ["pagamentos", uid] });
     qc.invalidateQueries({ queryKey: ["militares", uid] });
     qc.invalidateQueries({ queryKey: ["itens", uid] });
-  }, [qc]);
+  }, [qc, uid]);
 
 
   const stats = useMemo(() => {
