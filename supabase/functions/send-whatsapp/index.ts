@@ -37,9 +37,11 @@ Deno.serve(async (req: Request) => {
     );
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return json({ error: "Não autorizado" }, 401);
+    console.log(`[send-whatsapp] user_id: ${user.id}`);
 
-    const { data: cfg } = await supabase.from("configuracoes").select("z_api_instance, z_api_token, z_api_client_token").eq("user_id", user.id).maybeSingle();
-    if (!cfg?.z_api_instance || !cfg?.z_api_token) return json({ error: "Z-API não configurado para este usuário" }, 400);
+    const { data: cfg, error: cfgErr } = await supabase.from("configuracoes").select("z_api_instance, z_api_token, z_api_client_token").eq("user_id", user.id).maybeSingle();
+    console.log(`[send-whatsapp] cfg encontrado: ${!!cfg}, instance: ${cfg?.z_api_instance ? "ok" : "vazio"}, token: ${cfg?.z_api_token ? "ok" : "vazio"}, err: ${cfgErr?.message}`);
+    if (!cfg?.z_api_instance || !cfg?.z_api_token) return json({ error: `Z-API não configurado para este usuário (user_id: ${user.id})` }, 400);
 
     // Normaliza o telefone para o formato esperado pela Z-API antes de enviar.
     const normalizedPhone = phoneForZApi(phone);
@@ -54,6 +56,7 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({ phone: normalizedPhone, message }),
     });
     const body = await resp.text();
+    console.log(`[send-whatsapp] Z-API status: ${resp.status}, body: ${body.slice(0, 200)}`);
     if (!resp.ok) return json({ error: `Z-API ${resp.status}: ${body}` }, 502);
     return json({ ok: true, response: body });
   } catch (e) {
