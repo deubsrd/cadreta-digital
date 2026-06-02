@@ -176,7 +176,7 @@ export type Database = {
           admin_phone?: string | null
           frequencia_cobranca_dias?: number
           horario_cobranca?: string
-          id?: number
+          id?: never
           mensagem_template?: string | null
           mp_access_token?: string | null
           pix_key?: string | null
@@ -192,7 +192,7 @@ export type Database = {
           admin_phone?: string | null
           frequencia_cobranca_dias?: number
           horario_cobranca?: string
-          id?: number
+          id?: never
           mensagem_template?: string | null
           mp_access_token?: string | null
           pix_key?: string | null
