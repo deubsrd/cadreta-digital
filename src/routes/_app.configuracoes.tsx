@@ -85,6 +85,30 @@ function AgendamentosSection() {
     finally { setBusyIds((s) => { const n = new Set(s); n.delete(ag.id); return n; }); }
   };
 
+  const salvarTodas = async () => {
+    setBusyIds(new Set(localAgs.map((a) => a.id)));
+    try {
+      await Promise.all(
+        localAgs.map((ag) =>
+          saveAgendamento({
+            id: ag.id,
+            ativo: ag.ativo,
+            scheduled_at: localToIso(ag._date, ag._time),
+            intervalo_min: ag.intervalo_min,
+            intervalo_max: ag.intervalo_max,
+            executado_at: null,
+          })
+        )
+      );
+      toast.success("Todas as cobranças recorrentes foram salvas");
+      qc.invalidateQueries({ queryKey: ["agendamentos", uid] });
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusyIds(new Set());
+    }
+  };
+
   const resetar = async (ag: any) => {
     if (!confirm(`Resetar status da cobrança ${ag.id}? Ela poderá ser executada novamente.`)) return;
     setBusyIds((s) => new Set(s).add(ag.id));
