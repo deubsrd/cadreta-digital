@@ -38,8 +38,8 @@ Deno.serve(async (req: Request) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return json({ error: "Não autorizado" }, 401);
 
-    const { data: cfg } = await supabase.from("configuracoes").select("z_api_instance, z_api_token, z_api_client_token").eq("id", 1).maybeSingle();
-    if (!cfg?.z_api_instance || !cfg?.z_api_token) return json({ error: "Z-API não configurado" }, 400);
+    const { data: cfg } = await supabase.from("configuracoes").select("z_api_instance, z_api_token, z_api_client_token").eq("user_id", user.id).maybeSingle();
+    if (!cfg?.z_api_instance || !cfg?.z_api_token) return json({ error: "Z-API não configurado para este usuário" }, 400);
 
     // Normaliza o telefone para o formato esperado pela Z-API antes de enviar.
     const normalizedPhone = phoneForZApi(phone);
