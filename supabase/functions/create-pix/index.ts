@@ -5,6 +5,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function j(b: unknown, status = 200) {
+  return new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json", ...corsHeaders } });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -22,40 +26,35 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Verifica role de admin
-    const { data: roleRow } = await admin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!roleRow) return j({ error: "Acesso negado" }, 403);
-
-    // Reusa cobrança existente ainda pendente
+    // Reusa cobrança existente ainda pendente com mesmo valor
     const { data: existing } = await admin.from("pix_cobrancas")
       .select("*").eq("militar_id", militar_id).eq("periodo", periodo).maybeSingle();
 
-    // Só bloqueia se realmente já há pagamento registrado quitando esta fatura
     if (existing && existing.status === "paid") {
       const { data: pago } = await admin.from("pagamentos")
         .select("valor").eq("militar_id", militar_id).eq("periodo", periodo).maybeSingle();
-      if (pago && Number(pago.valor) >= Number(valor)) {
-        return j({ error: "Fatura já paga" }, 400);
-      }
-      // PIX antigo marcado como pago mas valor da fatura mudou — gera nova cobrança
+      if (pago && Number(pago.valor) >= Number(valor)) return j({ error: "Fatura já paga" }, 400);
     } else if (existing && Number(existing.valor) === Number(valor) && existing.status !== "cancelled") {
       return j({ ok: true, pix: existing, reused: true });
     }
 
-    const { data: cfg } = await admin.from("configuracoes").select("mp_access_token, pix_nome").eq("id", 1).maybeSingle();
+    // Busca config pelo user autenticado (multi-tenant)
+    const { data: cfg } = await admin.from("configuracoes")
+      .select("mp_access_token, pix_nome")
+      .eq("user_id", user.id)
+      .maybeSingle();
     const token = cfg?.mp_access_token?.trim();
     if (!token) return j({ error: "Mercado Pago não configurado (mp_access_token)" }, 400);
 
     const { data: militar } = await admin.from("militares").select("posto, nome_guerra").eq("id", militar_id).maybeSingle();
     const nome = militar ? `${militar.posto} ${militar.nome_guerra}` : "Militar";
-    const periodoLabel = new Date(periodo + "T00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
-    const txid = `cad-${militar_id.slice(0, 8)}-${periodo.replace(/-/g, "")}-${Date.now().toString(36)}`;
+    // Label do período — suporta "consolidado" (múltiplos meses)
+    const periodoLabel = periodo === "consolidado"
+      ? "Débitos consolidados"
+      : new Date(periodo + "T12:00:00Z").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+
+    const txid = `cad-${militar_id.slice(0, 8)}-${periodo.replace(/-/g, "").slice(0, 8)}-${Date.now().toString(36)}`;
     const idempotencyKey = crypto.randomUUID();
 
     const mpResp = await fetch("https://api.mercadopago.com/v1/payments", {
@@ -67,7 +66,7 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         transaction_amount: Number(Number(valor).toFixed(2)),
-        description: descricao || `Fatura ${periodoLabel} - ${nome}`,
+        description: descricao || `${periodoLabel} - ${nome}`,
         payment_method_id: "pix",
         external_reference: txid,
         payer: { email: "cobranca@cadretadigital.com.br", first_name: nome },
@@ -89,6 +88,7 @@ Deno.serve(async (req: Request) => {
       ticket_url: tx.ticket_url ?? null,
       status: "pending",
       raw: mpJson,
+      user_id: user.id,
     };
 
     if (existing) {
@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
       if (error) return j({ error: error.message }, 500);
       return j({ ok: true, pix: data });
     } else {
-      const { data, error } = await admin.from("pix_cobrancas").insert(row).select().maybeSingle();
+      const { data, error } = await admin.from("pix_cobrancas" as any).insert(row).select().maybeSingle();
       if (error) return j({ error: error.message }, 500);
       return j({ ok: true, pix: data });
     }
@@ -104,7 +104,3 @@ Deno.serve(async (req: Request) => {
     return j({ error: (e as Error).message }, 500);
   }
 });
-
-function j(b: unknown, status = 200) {
-  return new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json", ...corsHeaders } });
-}

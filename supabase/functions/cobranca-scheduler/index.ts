@@ -102,21 +102,22 @@ Deno.serve(async (req: Request) => {
 
     const periodoLabel = new Date(periodo + "T12:00:00Z").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
-    // Monta totais por militar
+    // Monta totais por militar+período (chave: "militar_id|periodo")
     const totalsByMil = new Map<string, { total: number; itens: string[] }>();
-    for (const c of compras ?? []) {
-      const cur = totalsByMil.get(c.militar_id) ?? { total: 0, itens: [] };
-      cur.total += Number(c.valor);
-      cur.itens.push(`${new Date(c.data_compra + "T12:00:00Z").toLocaleDateString("pt-BR")} — ${c.itens} (${brl(Number(c.valor))})`);
-      totalsByMil.set(c.militar_id, cur);
+    for (const comp of compras ?? []) {
+      const d = new Date(comp.data_compra + "T12:00:00Z");
+      const compPeriodo = ymd(new Date(d.getFullYear(), d.getMonth(), 1));
+      const key = `${comp.militar_id}|${compPeriodo}`;
+      const cur = totalsByMil.get(key) ?? { total: 0, itens: [] };
+      cur.total += Number(comp.valor);
+      cur.itens.push(`${d.toLocaleDateString("pt-BR")} — ${comp.itens} (${brl(Number(comp.valor))})`);
+      totalsByMil.set(key, cur);
     }
 
-    const pagosIds = new Set((pagamentos ?? []).map((p: any) => p.militar_id));
-
-    // Inadimplentes = têm compras fiado E não pagaram no período
+    // Inadimplentes = militares com pelo menos um mês sem pagamento
+    const pagosSet = new Set((pagamentos ?? []).map((p: any) => `${p.militar_id}|${p.periodo}`));
     const inadimplentes = (militares ?? []).filter((m: any) => {
-      const f = totalsByMil.get(m.id);
-      return f && f.total > 0 && !pagosIds.has(m.id);
+      return [...totalsByMil.keys()].some((k) => k.startsWith(m.id + "|") && !pagosSet.has(k));
     });
 
     const zapiOk = !!(cfg.z_api_instance && cfg.z_api_token);
@@ -153,37 +154,60 @@ Deno.serve(async (req: Request) => {
         }
 
         const mil = inadimplentes[i] as any;
-        const f = totalsByMil.get(mil.id)!;
 
-        // Reconfirma pagamento em tempo real (pode ter pago durante o loop)
+        // Reconfirma pagamentos em tempo real por militar (todos os meses)
         const { data: pgCheck } = await admin
           .from("pagamentos")
-          .select("id")
-          .eq("militar_id", mil.id)
-          .eq("periodo", periodo)
-          .maybeSingle();
+          .select("periodo")
+          .eq("militar_id", mil.id);
+        const periodosPagos = new Set((pgCheck ?? []).map((p: any) => p.periodo));
 
-        if (pgCheck) {
-          await admin.from("cobranca_logs").insert({
-            agendamento_id: ag.id,
-            militar_id: mil.id,
-            status: "pulado_pago",
-          });
+        // Meses ainda pendentes para este militar
+        const mesesPendentes: { periodo: string; total: number; itens: string[] }[] = [];
+        for (const [p, v] of totalsByMil.entries()) {
+          if (p.startsWith(mil.id + "|")) {
+            const perStr = p.split("|")[1];
+            if (!periodosPagos.has(perStr)) {
+              mesesPendentes.push({ periodo: perStr, total: v.total, itens: v.itens });
+            }
+          }
+        }
+
+        if (!mesesPendentes.length) {
+          await admin.from("cobranca_logs").insert({ agendamento_id: ag.id, militar_id: mil.id, status: "pulado_pago" });
           logs.push({ status: "pulado_pago" });
           continue;
         }
 
-        // Monta bloco PIX
-        const pix = (pixList ?? []).find((p: any) => p.militar_id === mil.id) as any;
-        const pixBlock = pix
-          ? `\n📱 *PIX Copia e Cola:*\n${pix.copia_cola ?? ""}${pix.ticket_url ? `\n\n🔗 Link: ${pix.ticket_url}` : ""}\n\n_Confirmação automática após o pagamento._`
+        const totalGeral = mesesPendentes.reduce((s, m) => s + m.total, 0);
+        const isConsolidado = mesesPendentes.length > 1;
+
+        // Monta bloco PIX (consolidado ou por mês)
+        const pixPeriodo = isConsolidado ? "consolidado" : mesesPendentes[0].periodo;
+        const pixExisting = (pixList ?? []).find((p: any) => p.militar_id === mil.id && p.periodo === pixPeriodo) as any;
+        const pixBlock = pixExisting
+          ? `\n📱 *PIX Copia e Cola:*\n${pixExisting.copia_cola ?? ""}${pixExisting.ticket_url ? `\n\n🔗 Link: ${pixExisting.ticket_url}` : ""}\n\n_Confirmação automática após o pagamento._`
           : `\nChave PIX: ${cfg.pix_key || "(configurar PIX nas configurações)"}`;
+
+        // Resumo: se consolidado, organiza por mês com label
+        const resumo = isConsolidado
+          ? mesesPendentes
+              .sort((a, b) => a.periodo.localeCompare(b.periodo))
+              .map((m) => {
+                const label = new Date(m.periodo + "T12:00:00Z").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+                return `📅 *${label.charAt(0).toUpperCase() + label.slice(1)}* — ${brl(m.total)}\n${m.itens.map((it) => `  • ${it}`).join("\n")}`;
+              }).join("\n\n")
+          : mesesPendentes[0].itens.join("\n");
+
+        const mesLabel = isConsolidado
+          ? `${mesesPendentes.length} meses em aberto`
+          : periodoLabel;
 
         const vars: Record<string, string> = {
           nome: militarLabel(mil),
-          mes: periodoLabel,
-          valor: brl(f.total).replace("R$\u00a0", ""),
-          resumo: f.itens.join("\n"),
+          mes: mesLabel,
+          valor: brl(totalGeral).replace("R$\u00a0", ""),
+          resumo,
           pix: pixBlock,
         };
 

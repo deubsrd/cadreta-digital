@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, MessageCircle, RotateCcw, FileDown, QrCode, Copy, Loader2, ExternalLink, Search, X, ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircle2, MessageCircle, MessageCircleMore, RotateCcw, FileDown, QrCode, Copy, Loader2, ExternalLink, Search, X, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import jsPDF from "jspdf";
@@ -211,6 +211,7 @@ function FaturasPage() {
   const [pixDialog, setPixDialog] = useState<{ pix: PixCobranca; nome: string; mesLabel: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // ── Gera/reutiliza PIX por período único ────────────────────────────────────
   const obterOuGerarPixPeriodo = async (militar_id: string, periodo: string, total: number, nomeMilitar: string, periodoDate: Date): Promise<PixCobranca | null> => {
     const existing = pixList.find((p) => p.militar_id === militar_id && p.periodo === periodo);
     if (existing && Number(existing.valor) === Number(total) && existing.status !== "cancelled") return existing;
@@ -218,6 +219,20 @@ function FaturasPage() {
     setBusyId(fatId);
     try {
       const pix = await gerarPix(militar_id, periodo, total, `Fatura ${monthLabel(periodoDate)} - ${nomeMilitar}`);
+      qc.invalidateQueries({ queryKey: ["pix_cobrancas"] });
+      return pix;
+    } catch (e: any) { toast.error(e.message); return null; }
+    finally { setBusyId(null); }
+  };
+
+  // ── Gera/reutiliza PIX consolidado (múltiplos meses) ─────────────────────
+  const obterOuGerarPixConsolidado = async (militar_id: string, totalConsolidado: number, nomeMilitar: string): Promise<PixCobranca | null> => {
+    const periodo = "consolidado";
+    const existing = pixList.find((p) => p.militar_id === militar_id && p.periodo === periodo);
+    if (existing && Number(existing.valor) === Number(totalConsolidado) && existing.status !== "cancelled") return existing;
+    setBusyId(`${militar_id}_consolidado`);
+    try {
+      const pix = await gerarPix(militar_id, periodo, totalConsolidado, `Débitos consolidados - ${nomeMilitar}`);
       qc.invalidateQueries({ queryKey: ["pix_cobrancas"] });
       return pix;
     } catch (e: any) { toast.error(e.message); return null; }
@@ -252,6 +267,52 @@ function FaturasPage() {
     }
     const phone = onlyDigits(formatBrazilPhone(militar?.telefone ?? "") ?? militar?.telefone ?? "");
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+  };
+
+  // ── Cobrança consolidada: todos os meses pendentes numa mensagem só ───────
+  const handleWhatsConsolidado = async (r: typeof historicoMilitar[number]) => {
+    if (!config) return;
+    const mesesPendentes = r.meses.filter((m) => !m.pago);
+    if (!mesesPendentes.length) return;
+
+    const pix = await obterOuGerarPixConsolidado(r.militar.id, r.totalPendente, militarLabel(r.militar));
+
+    const pixBlock = pix
+      ? `\n📱 *PIX Copia e Cola:*\n${pix.copia_cola ?? ""}${pix.ticket_url ? `\n\n🔗 Link: ${pix.ticket_url}` : ""}\n\n_Confirmação automática após o pagamento._`
+      : `\nChave PIX: ${config.pix_key || "(configurar PIX)"}`;
+
+    // Resumo organizado por mês
+    const resumoConsolidado = mesesPendentes.map((m) => {
+      const label = m.periodoDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+      return `📅 *${label.charAt(0).toUpperCase() + label.slice(1)}* — ${brl(m.total)}\n${m.itens.map((i) => `  • ${i}`).join("\n")}`;
+    }).join("\n\n");
+
+    const msg = buildMessage(config.mensagem_template, {
+      nome: militarLabel(r.militar),
+      mes: `${mesesPendentes.length} meses em aberto`,
+      valor: brl(r.totalPendente).replace("R$\u00a0", ""),
+      resumo: resumoConsolidado,
+      pix: pixBlock,
+    });
+
+    if (config.z_api_instance && config.z_api_token) {
+      try {
+        const { data, error } = await supabase.functions.invoke("send-whatsapp", {
+          body: { phone: onlyDigits(formatBrazilPhone(r.militar?.telefone ?? "") ?? r.militar?.telefone ?? ""), message: msg },
+        });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
+        toast.success("Cobrança consolidada enviada via Z-API");
+        return;
+      } catch (e: any) { toast.error(`Falha Z-API: ${e.message}. Abrindo WhatsApp manual.`); }
+    }
+    const phone = onlyDigits(formatBrazilPhone(r.militar?.telefone ?? "") ?? r.militar?.telefone ?? "");
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+  };
+
+  const handlePixConsolidado = async (r: typeof historicoMilitar[number]) => {
+    const pix = await obterOuGerarPixConsolidado(r.militar.id, r.totalPendente, militarLabel(r.militar));
+    if (pix) setPixDialog({ pix, nome: militarLabel(r.militar), mesLabel: `${r.mesesPendentes} meses em aberto` });
   };
 
   const exportPdf = () => {
@@ -392,18 +453,38 @@ function FaturasPage() {
                   <h3 className="font-semibold text-lg">{militarLabel(r.militar)}</h3>
                   <div className="text-xs text-muted-foreground">{r.militar.telefone}</div>
                 </div>
-                {/* Resumo financeiro */}
-                <div className="flex gap-3 flex-wrap text-right">
-                  <div>
-                    <div className="text-xs text-muted-foreground uppercase">Pendente</div>
-                    <div className="text-lg font-bold text-destructive">{brl(r.totalPendente)}</div>
-                    <div className="text-xs text-muted-foreground">{r.mesesPendentes} {r.mesesPendentes === 1 ? "mês" : "meses"}</div>
+                {/* Resumo financeiro + botões consolidados */}
+                <div className="flex flex-col items-end gap-2">
+                  <div className="flex gap-3 flex-wrap text-right">
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase">Pendente</div>
+                      <div className="text-lg font-bold text-destructive">{brl(r.totalPendente)}</div>
+                      <div className="text-xs text-muted-foreground">{r.mesesPendentes} {r.mesesPendentes === 1 ? "mês" : "meses"}</div>
+                    </div>
+                    <div className="border-l pl-3">
+                      <div className="text-xs text-muted-foreground uppercase">Total geral</div>
+                      <div className="text-lg font-bold">{brl(r.totalGeral)}</div>
+                      <div className="text-xs text-muted-foreground">{r.meses.length} {r.meses.length === 1 ? "mês" : "meses"}</div>
+                    </div>
                   </div>
-                  <div className="border-l pl-3">
-                    <div className="text-xs text-muted-foreground uppercase">Total geral</div>
-                    <div className="text-lg font-bold">{brl(r.totalGeral)}</div>
-                    <div className="text-xs text-muted-foreground">{r.meses.length} {r.meses.length === 1 ? "mês" : "meses"}</div>
-                  </div>
+                  {r.mesesPendentes > 1 && (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="h-8 text-xs"
+                        onClick={() => handlePixConsolidado(r)}
+                        disabled={busyId === `${r.militar.id}_consolidado`}>
+                        {busyId === `${r.militar.id}_consolidado`
+                          ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          : <QrCode className="h-3 w-3 mr-1" />}
+                        PIX total
+                      </Button>
+                      <Button size="sm" className="h-8 text-xs"
+                        onClick={() => handleWhatsConsolidado(r)}
+                        disabled={busyId === `${r.militar.id}_consolidado`}>
+                        <MessageCircleMore className="h-3 w-3 mr-1" />
+                        Cobrar tudo ({brl(r.totalPendente)})
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
 
