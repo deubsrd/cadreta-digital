@@ -125,6 +125,12 @@ function AgendamentosSection() {
 
   return (
     <>
+      <div className="flex justify-end mb-3">
+        <Button size="sm" onClick={salvarTodas} disabled={busyIds.size > 0 || !localAgs.length}>
+          {busyIds.size > 0 ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+          Salvar todas as cobranças
+        </Button>
+      </div>
       <div className="space-y-3">
         {localAgs.map((ag) => (
           <Card key={ag.id} className={`p-4${!ag.ativo ? " opacity-60" : ""}`}>
