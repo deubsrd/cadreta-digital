@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listCompras, listPagamentos, listMilitares, listItens, militarLabel } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { brl, monthLabel, startOfMonth, endOfMonth, ymd } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +60,8 @@ const PRESETS: { value: PeriodoPreset; label: string }[] = [
 
 function Dashboard() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const uid = user?.id ?? "";
   const hoje = new Date();
 
   const [preset, setPreset] = useState<PeriodoPreset>("mes_atual");
@@ -70,17 +73,17 @@ function Dashboard() {
     [preset, customFrom, customTo]
   );
 
-  const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares, staleTime: 0 });
-  const { data: compras = [] } = useQuery({ queryKey: ["compras"], queryFn: () => listCompras(), staleTime: 0, refetchOnMount: true });
-  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos, staleTime: 0, refetchOnMount: true });
-  const { data: itens = [] } = useQuery({ queryKey: ["itens"], queryFn: listItens, staleTime: 0 });
+  const { data: militares = [] } = useQuery({ queryKey: ["militares", uid], queryFn: listMilitares, staleTime: 0 });
+  const { data: compras = [] } = useQuery({ queryKey: ["compras", uid], queryFn: () => listCompras(), staleTime: 0, refetchOnMount: true });
+  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos", uid], queryFn: listPagamentos, staleTime: 0, refetchOnMount: true });
+  const { data: itens = [] } = useQuery({ queryKey: ["itens", uid], queryFn: listItens, staleTime: 0 });
 
   // Invalida cache ao montar — garante dados frescos após qualquer quebra de RLS
   useEffect(() => {
-    qc.invalidateQueries({ queryKey: ["compras"] });
-    qc.invalidateQueries({ queryKey: ["pagamentos"] });
-    qc.invalidateQueries({ queryKey: ["militares"] });
-    qc.invalidateQueries({ queryKey: ["itens"] });
+    qc.invalidateQueries({ queryKey: ["compras", uid] });
+    qc.invalidateQueries({ queryKey: ["pagamentos", uid] });
+    qc.invalidateQueries({ queryKey: ["militares", uid] });
+    qc.invalidateQueries({ queryKey: ["itens", uid] });
   }, [qc]);
 
 

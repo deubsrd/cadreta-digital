@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getConfig, saveConfig, listAgendamentos, saveAgendamento, listCobrancaLogs } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,12 +53,14 @@ function AgStatusBadge({ ag }: { ag: any }) {
 
 function AgendamentosSection() {
   const qc = useQueryClient();
-  const { data: ags = [], isLoading } = useQuery({ queryKey: ["agendamentos"], queryFn: listAgendamentos });
+  const { user } = useAuth();
+  const uid = user?.id ?? "";
+  const { data: ags = [], isLoading } = useQuery({ queryKey: ["agendamentos", uid], queryFn: listAgendamentos });
   const [localAgs, setLocalAgs] = useState<any[]>([]);
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set());
   const [logDialog, setLogDialog] = useState<number | null>(null);
   const { data: logs = [], isLoading: logsLoading } = useQuery({
-    queryKey: ["cobranca_logs", logDialog],
+    queryKey: ["cobranca_logs", uid, logDialog],
     staleTime: 0,
     refetchOnMount: true,
     queryFn: () => listCobrancaLogs(logDialog ?? undefined),
@@ -77,7 +80,7 @@ function AgendamentosSection() {
       const scheduled_at = localToIso(ag._date, ag._time);
       await saveAgendamento({ id: ag.id, ativo: ag.ativo, scheduled_at, intervalo_min: ag.intervalo_min, intervalo_max: ag.intervalo_max, executado_at: null });
       toast.success(`Cobrança ${ag.id} salva`);
-      qc.invalidateQueries({ queryKey: ["agendamentos"] });
+      qc.invalidateQueries({ queryKey: ["agendamentos", uid] });
     } catch (e: any) { toast.error(e.message); }
     finally { setBusyIds((s) => { const n = new Set(s); n.delete(ag.id); return n; }); }
   };
@@ -88,7 +91,7 @@ function AgendamentosSection() {
     try {
       await saveAgendamento({ id: ag.id, executado_at: null });
       toast.success(`Cobrança ${ag.id} resetada`);
-      qc.invalidateQueries({ queryKey: ["agendamentos"] });
+      qc.invalidateQueries({ queryKey: ["agendamentos", uid] });
       setLocalAgs([]);
     } catch (e: any) { toast.error(e.message); }
     finally { setBusyIds((s) => { const n = new Set(s); n.delete(ag.id); return n; }); }
@@ -203,7 +206,9 @@ const CONFIG_DEFAULTS = {
 
 function ConfigPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["config"], queryFn: getConfig, staleTime: 0, refetchOnMount: true });
+  const { user } = useAuth();
+  const uid = user?.id ?? "";
+  const { data } = useQuery({ queryKey: ["config", uid], queryFn: getConfig, staleTime: 0, refetchOnMount: true });
   const [overrides, setOverrides] = useState<Record<string, any>>({});
   const [busy, setBusy] = useState(false);
 
@@ -218,7 +223,7 @@ function ConfigPage() {
     try {
       await saveConfig(form);
       toast.success("Configurações salvas");
-      qc.invalidateQueries({ queryKey: ["config"] });
+      qc.invalidateQueries({ queryKey: ["config", uid] });
     } catch (e: any) { toast.error(e.message); }
     finally { setBusy(false); }
   };

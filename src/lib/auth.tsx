@@ -20,8 +20,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    let previousUserId: string | null = null;
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      const newUserId = s?.user?.id ?? null;
+      // Se o usuário mudou (login/logout/troca de conta), limpa todo o cache
+      if (previousUserId !== null && previousUserId !== newUserId) {
+        // Força reload para garantir cache zerado — solução mais segura
+        window.location.href = newUserId ? "/" : "/login";
+        return;
+      }
+      previousUserId = newUserId;
+      setSession(s);
+    });
+
     supabase.auth.getSession().then(({ data }) => {
+      previousUserId = data.session?.user?.id ?? null;
       setSession(data.session);
       setLoading(false);
     });

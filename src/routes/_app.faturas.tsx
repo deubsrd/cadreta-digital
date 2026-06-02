@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { brl, ymd, startOfMonth, endOfMonth, monthLabel, onlyDigits, formatBrazilPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,8 @@ function FaturaCard({ faturaId, total, itens, pago, periodoDate, onWhats, onMarc
 // ─── Página principal ────────────────────────────────────────────────────────
 function FaturasPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const uid = user?.id ?? "";
   const today = new Date();
   const [mes, setMes] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
   const [filter, setFilter] = useState<"todos" | "pendentes" | "pagos">("todos");
@@ -85,20 +88,20 @@ function FaturasPage() {
 
   const modoHistorico = buscaNome.trim().length > 0;
 
-  const { data: militares = [] } = useQuery({ queryKey: ["militares"], queryFn: listMilitares, staleTime: 0, refetchOnMount: true });
+  const { data: militares = [] } = useQuery({ queryKey: ["militares", uid], queryFn: listMilitares, staleTime: 0, refetchOnMount: true });
   const { data: comprasMes = [] } = useQuery({
-    queryKey: ["compras", range],
+    queryKey: ["compras", uid, range],
     queryFn: () => listCompras({ from: range.from, to: range.to }),
     staleTime: 0, refetchOnMount: true, enabled: !modoHistorico,
   });
   const { data: comprasTodas = [] } = useQuery({
-    queryKey: ["compras_todas"],
+    queryKey: ["compras_todas", uid],
     queryFn: () => listCompras(),
     staleTime: 0, enabled: modoHistorico,
   });
   const compras = modoHistorico ? comprasTodas : comprasMes;
-  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos, staleTime: 0, refetchOnMount: true });
-  const { data: config } = useQuery({ queryKey: ["config"], queryFn: getConfig, staleTime: 0 });
+  const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos", uid], queryFn: listPagamentos, staleTime: 0, refetchOnMount: true });
+  const { data: config } = useQuery({ queryKey: ["config", uid], queryFn: getConfig, staleTime: 0 });
 
   // ── Modo mês ─────────────────────────────────────────────────────────────
   const faturasMes = useMemo(() => {
