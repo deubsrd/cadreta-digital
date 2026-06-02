@@ -194,16 +194,21 @@ function AgendamentosSection() {
   );
 }
 
+const CONFIG_DEFAULTS = {
+  id: 1, pix_key: "", pix_nome: "", mensagem_template: "",
+  frequencia_cobranca_dias: 3, horario_cobranca: "09:00",
+  z_api_instance: "", z_api_token: "", z_api_client_token: "",
+  proxima_cobranca: null, mp_access_token: "", admin_phone: "",
+};
+
 function ConfigPage() {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ["config"], queryFn: getConfig, staleTime: 0, refetchOnMount: true });
+  const { data } = useQuery({ queryKey: ["config"], queryFn: getConfig, staleTime: 0, refetchOnMount: true });
   const [overrides, setOverrides] = useState<Record<string, any>>({});
   const [busy, setBusy] = useState(false);
 
-  // form = dados do banco + alterações locais ainda não salvas
-  const form = data ? { ...data, ...overrides } : null;
-
-  if (isLoading || !form) return <div className="text-muted-foreground p-4">Carregando...</div>;
+  // Abre imediatamente com defaults, preenche com dados do banco quando chegar
+  const form = { ...CONFIG_DEFAULTS, ...(data ?? {}), ...overrides };
 
   const set = (k: string, v: any) => setOverrides((prev) => ({ ...prev, [k]: v }));
 
