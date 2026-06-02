@@ -94,8 +94,10 @@ Deno.serve(async (req: Request) => {
       ] = await Promise.all([
         admin.from("configuracoes").select("*").eq("user_id", tenantUid).maybeSingle(),
         admin.from("militares").select("*").eq("user_id", tenantUid).eq("ativo", true),
-        admin.from("compras").select("*").eq("user_id", tenantUid).gte("data_compra", fromDate).lte("data_compra", toDate).eq("pago_na_hora", false),
-        admin.from("pagamentos").select("*").eq("user_id", tenantUid).eq("periodo", periodo),
+        // TODAS as compras fiadas em aberto (qualquer mês, não só o atual)
+        admin.from("compras").select("*").eq("user_id", tenantUid).eq("pago_na_hora", false),
+        // TODOS os pagamentos do tenant (para detectar qualquer período já quitado)
+        admin.from("pagamentos").select("*").eq("user_id", tenantUid),
       ]);
 
       if (!cfg) {
