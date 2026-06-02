@@ -148,3 +148,15 @@ CREATE TRIGGER on_auth_user_created
 --    (substitui a constraint single_row que forçava id = 1)
 ALTER TABLE public.configuracoes DROP CONSTRAINT IF EXISTS single_row;
 ALTER TABLE public.configuracoes ADD CONSTRAINT configuracoes_user_id_unique UNIQUE (user_id);
+
+-- 7. Corrige trigger log_item_price_change para incluir user_id
+--    (herda o user_id do item pai)
+CREATE OR REPLACE FUNCTION public.log_item_price_change()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF (TG_OP = 'INSERT') OR (NEW.preco_avista IS DISTINCT FROM OLD.preco_avista) OR (NEW.preco_fiado IS DISTINCT FROM OLD.preco_fiado) THEN
+    INSERT INTO public.item_price_history (item_id, preco_avista, preco_fiado, user_id)
+    VALUES (NEW.id, NEW.preco_avista, NEW.preco_fiado, NEW.user_id);
+  END IF;
+  RETURN NEW;
+END $$;
