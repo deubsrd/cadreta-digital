@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
     const paymentId = String(payload?.data?.id ?? dataIdQ ?? "");
     if (!paymentId) return new Response("missing payment id");
 
-    const { data: cfg } = await admin.from("configuracoes").select("*").eq("id", 1).maybeSingle();
+    const { data: cfg } = await admin.from("configuracoes").select("*").eq("user_id", cobr.user_id).maybeSingle();
     const token = cfg?.mp_access_token?.trim();
     if (!token) return new Response("no token", { status: 500 });
 

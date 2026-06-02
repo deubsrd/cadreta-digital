@@ -336,12 +336,12 @@ function FaturasPage() {
                       </Button>
                       {f.pago ? (
                         <Button size="sm" variant="ghost" onClick={async () => {
-                          try { await desmarcarPago(f.militar_id, range.periodo); toast.success("Reaberto"); qc.invalidateQueries(); }
+                          try { await desmarcarPago(f.militar_id, range.periodo); toast.success("Reaberto"); qc.invalidateQueries({ queryKey: ["pagamentos", uid] }); }
                           catch (e: any) { toast.error(e.message); }
                         }}><RotateCcw className="h-4 w-4 mr-1" />Reabrir</Button>
                       ) : (
                         <Button size="sm" onClick={async () => {
-                          try { await marcarPago({ militar_id: f.militar_id, periodo: range.periodo, valor: f.total }); toast.success("Marcado como pago"); qc.invalidateQueries(); }
+                          try { await marcarPago({ militar_id: f.militar_id, periodo: range.periodo, valor: f.total }); toast.success("Marcado como pago"); qc.invalidateQueries({ queryKey: ["pagamentos", uid] }); }
                           catch (e: any) { toast.error(e.message); }
                         }}><CheckCircle2 className="h-4 w-4 mr-1" />Marcar pago</Button>
                       )}
@@ -408,11 +408,11 @@ function FaturasPage() {
                     periodoDate={m.periodoDate}
                     onWhats={() => handleWhats(r.militar, m.total, m.itens, m.periodoDate)}
                     onMarcarPago={async () => {
-                      try { await marcarPago({ militar_id: r.militar.id, periodo: m.periodo, valor: m.total }); toast.success("Marcado como pago"); qc.invalidateQueries(); }
+                      try { await marcarPago({ militar_id: r.militar.id, periodo: m.periodo, valor: m.total }); toast.success("Marcado como pago"); qc.invalidateQueries({ queryKey: ["pagamentos", uid] }); }
                       catch (e: any) { toast.error(e.message); }
                     }}
                     onDesmarcarPago={async () => {
-                      try { await desmarcarPago(r.militar.id, m.periodo); toast.success("Reaberto"); qc.invalidateQueries(); }
+                      try { await desmarcarPago(r.militar.id, m.periodo); toast.success("Reaberto"); qc.invalidateQueries({ queryKey: ["pagamentos", uid] }); }
                       catch (e: any) { toast.error(e.message); }
                     }}
                   />

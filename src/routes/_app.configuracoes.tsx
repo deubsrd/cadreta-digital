@@ -201,7 +201,7 @@ const CONFIG_DEFAULTS = {
   id: 1, pix_key: "", pix_nome: "", mensagem_template: "",
   frequencia_cobranca_dias: 3, horario_cobranca: "09:00",
   z_api_instance: "", z_api_token: "", z_api_client_token: "",
-  proxima_cobranca: null, mp_access_token: "", admin_phone: "",
+  proxima_cobranca: null, admin_phone: "",
 };
 
 function ConfigPage() {

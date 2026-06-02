@@ -110,7 +110,6 @@ export type Configuracoes = {
   z_api_token: string;
   z_api_client_token: string;
   proxima_cobranca: string | null;
-  mp_access_token: string;
   admin_phone: string;
 };
 
@@ -151,26 +150,8 @@ export type PixCobranca = {
   updated_at: string;
 };
 
-export async function listPixCobrancas() {
-  const { data, error } = await supabase.from("pix_cobrancas" as any).select("*").order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as unknown as PixCobranca[];
-}
 
-export async function getPixCobranca(militar_id: string, periodo: string) {
-  const { data, error } = await supabase.from("pix_cobrancas" as any).select("*").eq("militar_id", militar_id).eq("periodo", periodo).maybeSingle();
-  if (error) throw error;
-  return data as unknown as PixCobranca | null;
-}
 
-export async function gerarPix(militar_id: string, periodo: string, valor: number, descricao?: string) {
-  const { data, error } = await supabase.functions.invoke("create-pix", {
-    body: { militar_id, periodo, valor, descricao },
-  });
-  if (error) throw error;
-  if ((data as any)?.error) throw new Error((data as any).error);
-  return (data as any).pix as PixCobranca;
-}
 
 export async function listMilitares() {
   const { data, error } = await supabase.from("militares").select("*").order("nome_guerra");

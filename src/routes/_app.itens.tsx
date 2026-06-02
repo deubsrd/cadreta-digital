@@ -130,7 +130,7 @@ function ItensPage() {
                       <Button size="icon" variant="ghost" onClick={() => { setEditing(i); setOpen(true); }}><Pencil className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" onClick={async () => {
                         if (!confirm(`Excluir "${i.nome}"?`)) return;
-                        try { await deleteItem(i.id); toast.success("Excluído"); qc.invalidateQueries(); }
+                        try { await deleteItem(i.id); toast.success("Excluído"); qc.invalidateQueries({ queryKey: ["itens", uid] }); }
                         catch (e: any) { toast.error(e.message); }
                       }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </td>
@@ -145,7 +145,7 @@ function ItensPage() {
         </div>
       </Card>
 
-      <ItemDialog open={open} setOpen={setOpen} editing={editing} onSaved={() => qc.invalidateQueries()} />
+      <ItemDialog open={open} setOpen={setOpen} editing={editing} onSaved={() => { qc.invalidateQueries({ queryKey: ["itens", uid] }); qc.invalidateQueries({ queryKey: ["militares", uid] }); }} />
       <HistoryDialog item={historyFor} onClose={() => setHistoryFor(null)} />
     </div>
   );

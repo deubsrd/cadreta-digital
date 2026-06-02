@@ -83,7 +83,7 @@ function MilitaresPage() {
                     </Button>
                     <Button size="icon" variant="ghost" onClick={async () => {
                       if (!confirm(`Excluir ${militarLabel(m)}? Todas as compras serão removidas.`)) return;
-                      try { await deleteMilitar(m.id); toast.success("Militar excluído"); qc.invalidateQueries(); }
+                      try { await deleteMilitar(m.id); toast.success("Militar excluído"); qc.invalidateQueries({ queryKey: ["militares", uid] }); }
                       catch (e: any) { toast.error(e.message); }
                     }}>
                       <Trash2 className="h-4 w-4 text-destructive" />
@@ -99,8 +99,8 @@ function MilitaresPage() {
         </div>
       </Card>
 
-      <MilitarDialog open={open} setOpen={setOpen} editing={editing} onSaved={() => qc.invalidateQueries()} />
-      <ImportDialog open={importOpen} setOpen={setImportOpen} existing={militares} onDone={() => qc.invalidateQueries()} />
+      <MilitarDialog open={open} setOpen={setOpen} editing={editing} onSaved={() => qc.invalidateQueries({ queryKey: ["militares", uid] })} />
+      <ImportDialog open={importOpen} setOpen={setImportOpen} existing={militares} onDone={() => qc.invalidateQueries({ queryKey: ["militares", uid] })} />
     </div>
   );
 }
