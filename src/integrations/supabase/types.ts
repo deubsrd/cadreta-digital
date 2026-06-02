@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       cobranca_agendamentos: {
         Row: {
+          user_id: string
           ativo: boolean
           created_at: string
           executado_at: string | null
@@ -26,6 +27,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          user_id?: string
           ativo?: boolean
           created_at?: string
           executado_at?: string | null
@@ -36,6 +38,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          user_id?: string
           ativo?: boolean
           created_at?: string
           executado_at?: string | null
@@ -49,6 +52,7 @@ export type Database = {
       }
       cobranca_logs: {
         Row: {
+          user_id: string
           agendamento_id: number
           enviado_at: string
           erro_msg: string | null
@@ -57,6 +61,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          user_id?: string
           agendamento_id: number
           enviado_at?: string
           erro_msg?: string | null
@@ -65,6 +70,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          user_id?: string
           agendamento_id?: number
           enviado_at?: string
           erro_msg?: string | null
@@ -91,6 +97,7 @@ export type Database = {
       }
       compras: {
         Row: {
+          user_id: string
           created_at: string
           data_compra: string
           id: string
@@ -104,6 +111,7 @@ export type Database = {
           valor: number
         }
         Insert: {
+          user_id?: string
           created_at?: string
           data_compra?: string
           id?: string
@@ -117,6 +125,7 @@ export type Database = {
           valor: number
         }
         Update: {
+          user_id?: string
           created_at?: string
           data_compra?: string
           id?: string
@@ -148,6 +157,7 @@ export type Database = {
       }
       configuracoes: {
         Row: {
+          user_id: string
           admin_phone: string | null
           frequencia_cobranca_dias: number
           horario_cobranca: string
@@ -163,6 +173,7 @@ export type Database = {
           z_api_token: string | null
         }
         Insert: {
+          user_id?: string
           admin_phone?: string | null
           frequencia_cobranca_dias?: number
           horario_cobranca?: string
@@ -178,6 +189,7 @@ export type Database = {
           z_api_token?: string | null
         }
         Update: {
+          user_id?: string
           admin_phone?: string | null
           frequencia_cobranca_dias?: number
           horario_cobranca?: string
@@ -196,6 +208,7 @@ export type Database = {
       }
       item_price_history: {
         Row: {
+          user_id: string
           changed_at: string
           id: string
           item_id: string
@@ -203,6 +216,7 @@ export type Database = {
           preco_fiado: number
         }
         Insert: {
+          user_id?: string
           changed_at?: string
           id?: string
           item_id: string
@@ -210,6 +224,7 @@ export type Database = {
           preco_fiado: number
         }
         Update: {
+          user_id?: string
           changed_at?: string
           id?: string
           item_id?: string
@@ -228,6 +243,7 @@ export type Database = {
       }
       itens: {
         Row: {
+          user_id: string
           ativo: boolean
           categoria: string | null
           created_at: string
@@ -239,6 +255,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          user_id?: string
           ativo?: boolean
           categoria?: string | null
           created_at?: string
@@ -250,6 +267,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          user_id?: string
           ativo?: boolean
           categoria?: string | null
           created_at?: string
@@ -264,6 +282,7 @@ export type Database = {
       }
       militares: {
         Row: {
+          user_id: string
           ativo: boolean
           created_at: string
           id: string
@@ -273,6 +292,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          user_id?: string
           ativo?: boolean
           created_at?: string
           id?: string
@@ -282,6 +302,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          user_id?: string
           ativo?: boolean
           created_at?: string
           id?: string
@@ -294,6 +315,7 @@ export type Database = {
       }
       pagamentos: {
         Row: {
+          user_id: string
           created_at: string
           id: string
           militar_id: string
@@ -303,6 +325,7 @@ export type Database = {
           valor: number
         }
         Insert: {
+          user_id?: string
           created_at?: string
           id?: string
           militar_id: string
@@ -312,6 +335,7 @@ export type Database = {
           valor: number
         }
         Update: {
+          user_id?: string
           created_at?: string
           id?: string
           militar_id?: string
@@ -332,6 +356,7 @@ export type Database = {
       }
       pix_cobrancas: {
         Row: {
+          user_id: string
           copia_cola: string | null
           created_at: string
           id: string
@@ -350,6 +375,7 @@ export type Database = {
           valor: number
         }
         Insert: {
+          user_id?: string
           copia_cola?: string | null
           created_at?: string
           id?: string
@@ -368,6 +394,7 @@ export type Database = {
           valor: number
         }
         Update: {
+          user_id?: string
           copia_cola?: string | null
           created_at?: string
           id?: string
@@ -389,22 +416,22 @@ export type Database = {
       }
       user_roles: {
         Row: {
+          user_id: string
           created_at: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
-          user_id: string
         }
         Insert: {
+          user_id?: string
           created_at?: string
           id?: string
           role: Database["public"]["Enums"]["app_role"]
-          user_id: string
         }
         Update: {
+          user_id?: string
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
-          user_id?: string
         }
         Relationships: []
       }

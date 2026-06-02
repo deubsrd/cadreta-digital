@@ -46,6 +46,14 @@ export type ItemPriceHistory = {
   changed_at: string;
 };
 
+
+// Retorna o user_id do usuário autenticado (necessário para inserts multi-tenant)
+async function getUid(): Promise<string> {
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) throw new Error("Não autenticado");
+  return data.user.id;
+}
+
 export async function listItens() {
   const { data, error } = await supabase.from("itens").select("*").order("nome");
   if (error) throw error;
@@ -65,7 +73,8 @@ export async function upsertItem(i: Partial<Item> & { nome: string; preco_avista
     const { error } = await supabase.from("itens").update(payload).eq("id", i.id);
     if (error) throw error;
   } else {
-    const { error } = await supabase.from("itens").insert(payload);
+    const uid = await getUid();
+    const { error } = await supabase.from("itens" as any).insert({ ...payload, user_id: uid });
     if (error) throw error;
   }
 }
@@ -181,8 +190,9 @@ export async function upsertMilitar(m: Partial<Militar> & { nome_guerra: string;
     }).eq("id", m.id);
     if (error) throw error;
   } else {
-    const { error } = await supabase.from("militares").insert({
-      nome_guerra: m.nome_guerra, posto: m.posto, telefone, ativo: m.ativo ?? true,
+    const uid = await getUid();
+    const { error } = await supabase.from("militares" as any).insert({
+      nome_guerra: m.nome_guerra, posto: m.posto, telefone, ativo: m.ativo ?? true, user_id: uid,
     });
     if (error) throw error;
   }
@@ -198,7 +208,9 @@ export async function bulkInsertMilitares(rows: { nome_guerra: string; posto: st
     if (!telefone) throw new Error(`Telefone inválido para ${r.nome_guerra}: "${r.telefone}"`);
     return { ...r, telefone };
   });
-  const { error } = await supabase.from("militares").insert(normalized);
+  const uid = await getUid();
+  const withUid = normalized.map((r) => ({ ...r, user_id: uid }));
+  const { error } = await supabase.from("militares" as any).insert(withUid);
   if (error) throw error;
 }
 
@@ -217,13 +229,16 @@ export async function listCompras(opts?: { from?: string; to?: string }) {
 }
 
 export async function createCompra(c: { militar_id: string; data_compra: string; itens: string; valor: number; observacoes?: string | null; item_id?: string | null; quantidade?: number; pago_na_hora?: boolean }) {
-  const { error } = await supabase.from("compras").insert(c);
+  const uid = await getUid();
+  const { error } = await supabase.from("compras" as any).insert({ ...c, user_id: uid });
   if (error) throw error;
 }
 
 export async function createComprasBulk(rows: { militar_id: string; data_compra: string; itens: string; valor: number; observacoes?: string | null; item_id?: string | null; quantidade?: number; pago_na_hora?: boolean }[]) {
   if (!rows.length) return;
-  const { error } = await supabase.from("compras").insert(rows);
+  const uid = await getUid();
+  const rowsWithUid = rows.map((r) => ({ ...r, user_id: uid }));
+  const { error } = await supabase.from("compras" as any).insert(rowsWithUid);
   if (error) throw error;
 }
 
@@ -244,7 +259,8 @@ export async function listPagamentos() {
 }
 
 export async function marcarPago(p: { militar_id: string; periodo: string; valor: number; observacoes?: string }) {
-  const { error } = await supabase.from("pagamentos").upsert(p, { onConflict: "militar_id,periodo" });
+  const uid = await getUid();
+  const { error } = await supabase.from("pagamentos" as any).upsert({ ...p, user_id: uid }, { onConflict: "militar_id,periodo" });
   if (error) throw error;
 }
 
@@ -254,13 +270,15 @@ export async function desmarcarPago(militar_id: string, periodo: string) {
 }
 
 export async function getConfig() {
-  const { data, error } = await supabase.from("configuracoes").select("*").eq("id", 1).maybeSingle();
+  const uid = await getUid();
+  const { data, error } = await supabase.from("configuracoes" as any).select("*").eq("user_id", uid).maybeSingle();
   if (error) throw error;
   return data as Configuracoes | null;
 }
 
 export async function saveConfig(c: Partial<Configuracoes>) {
-  const { error } = await supabase.from("configuracoes").update(c).eq("id", 1);
+  const uid = await getUid();
+  const { error } = await supabase.from("configuracoes" as any).upsert({ ...c, user_id: uid }, { onConflict: "user_id" });
   if (error) throw error;
 }
 
@@ -277,9 +295,10 @@ export async function listAgendamentos() {
 
 export async function saveAgendamento(ag: Partial<CobrancaAgendamento> & { id: number }) {
   const { error } = await supabase
-    .from("cobranca_agendamentos")
+    .from("cobranca_agendamentos" as any)
     .update(ag)
-    .eq("id", ag.id);
+    .eq("id", ag.id)
+    .eq("user_id", (await supabase.auth.getUser()).data.user!.id);
   if (error) throw error;
 }
 
