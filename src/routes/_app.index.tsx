@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listCompras, listPagamentos, listMilitares, listItens, listPixCobrancas, militarLabel } from "@/lib/api";
+import { listCompras, listPagamentos, listMilitares, listItens, militarLabel } from "@/lib/api";
 import { brl, monthLabel, startOfMonth, endOfMonth, ymd } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { TrendingUp, Users, AlertTriangle, CheckCircle2, Wallet, Package, QrCode, Calendar } from "lucide-react";
+import { TrendingUp, Users, AlertTriangle, CheckCircle2, Wallet, Package, Calendar } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -74,7 +74,6 @@ function Dashboard() {
   const { data: compras = [] } = useQuery({ queryKey: ["compras"], queryFn: () => listCompras(), staleTime: 0, refetchOnMount: true });
   const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos"], queryFn: listPagamentos, staleTime: 0, refetchOnMount: true });
   const { data: itens = [] } = useQuery({ queryKey: ["itens"], queryFn: listItens, staleTime: 0 });
-  const { data: pixList = [] } = useQuery({ queryKey: ["pix_cobrancas"], queryFn: listPixCobrancas, staleTime: 0 });
 
   // Invalida cache ao montar — garante dados frescos após qualquer quebra de RLS
   useEffect(() => {
@@ -84,26 +83,6 @@ function Dashboard() {
     qc.invalidateQueries({ queryKey: ["itens"] });
   }, [qc]);
 
-  useEffect(() => {
-    const ch = supabase.channel("dash_pix")
-      .on("postgres_changes", { event: "*", schema: "public", table: "pix_cobrancas" }, () => {
-        qc.invalidateQueries({ queryKey: ["pix_cobrancas"] });
-        qc.invalidateQueries({ queryKey: ["pagamentos"] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [qc]);
-
-  const pixStats = useMemo(() => {
-    const todayIso = new Date(); todayIso.setHours(0, 0, 0, 0);
-    const todayStr = todayIso.toISOString();
-    const recebidosHoje = pixList.filter((p) => p.status === "paid" && p.paid_at && p.paid_at >= todayStr);
-    const totalHoje = recebidosHoje.reduce((s, p) => s + Number(p.paid_amount ?? p.valor), 0);
-    const ultimosPagos = pixList.filter((p) => p.status === "paid").slice(0, 5);
-    const aguardando = pixList.filter((p) => p.status === "pending").length;
-    const revisao = pixList.filter((p) => p.needs_review).length;
-    return { recebidosHoje: recebidosHoje.length, totalHoje, ultimosPagos, aguardando, revisao };
-  }, [pixList]);
 
   const stats = useMemo(() => {
     const comprasPeriodo = compras.filter((c) => c.data_compra >= periodo.from && c.data_compra <= periodo.to);
@@ -301,36 +280,6 @@ function Dashboard() {
         </Card>
       </div>
 
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <h3 className="font-semibold flex items-center gap-2"><QrCode className="h-4 w-4" />PIX em tempo real</h3>
-          <div className="flex gap-2 flex-wrap text-xs">
-            <Badge variant="secondary">Hoje: {pixStats.recebidosHoje} · {brl(pixStats.totalHoje)}</Badge>
-            <Badge variant="outline">Aguardando: {pixStats.aguardando}</Badge>
-            {pixStats.revisao > 0 && <Badge variant="destructive">Conferir: {pixStats.revisao}</Badge>}
-          </div>
-        </div>
-        {pixStats.ultimosPagos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum pagamento PIX recebido ainda.</p>
-        ) : (
-          <div className="space-y-2">
-            {pixStats.ultimosPagos.map((p) => {
-              const m = militares.find((x) => x.id === p.militar_id);
-              return (
-                <div key={p.id} className="flex items-center justify-between p-3 rounded-md bg-muted/50 text-sm">
-                  <div>
-                    <div className="font-medium">{militarLabel(m)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {monthLabel(new Date(p.periodo + "T00:00"))} · {p.paid_at ? new Date(p.paid_at).toLocaleString("pt-BR") : "—"}
-                    </div>
-                  </div>
-                  <div className="font-semibold text-success">{brl(Number(p.paid_amount ?? p.valor))}</div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
     </div>
   );
 }

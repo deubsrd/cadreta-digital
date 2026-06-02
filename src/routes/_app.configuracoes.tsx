@@ -266,17 +266,6 @@ function ConfigPage() {
           </div>
         </Card>
 
-        {/* Mercado Pago */}
-        <Card className="p-5 space-y-4">
-          <h3 className="font-semibold">Mercado Pago (PIX automático)</h3>
-          <p className="text-xs text-muted-foreground">Cole o <strong>Access Token</strong> da sua conta Mercado Pago (Produção).</p>
-          <div><Label>Access Token</Label><Input type="password" value={form.mp_access_token ?? ""} onChange={(e) => set("mp_access_token", e.target.value)} placeholder="APP_USR-..." /></div>
-          <div className="text-xs text-muted-foreground space-y-1">
-            <div><strong>URL do webhook</strong> (configure no painel MP → Suas integrações → Webhooks):</div>
-            <code className="block break-all bg-muted p-2 rounded">{import.meta.env.VITE_SUPABASE_URL}/functions/v1/mp-webhook</code>
-          </div>
-        </Card>
-
         <div className="flex justify-between items-center gap-2 flex-wrap">
           <Button type="button" variant="outline" disabled={busy} onClick={async () => {
             setBusy(true);
