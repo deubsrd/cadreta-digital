@@ -162,22 +162,38 @@ function FaturasPage() {
   const temFiltroAtivo = buscaNome.trim() !== "" || buscaPosto !== "todos";
 
   // ── Envio WhatsApp ────────────────────────────────────────────────────────
-  const enviarWhats = (militar: any, msg: string) => {
-    if (config?.z_api_instance && config?.z_api_token) {
-      supabase.functions.invoke("send-whatsapp", {
-        body: { phone: onlyDigits(formatBrazilPhone(militar?.telefone ?? "") ?? militar?.telefone ?? ""), message: msg },
-      }).then(({ data, error }) => {
-        if (error || (data as any)?.error) {
-          toast.error("Falha Z-API. Abrindo WhatsApp manual.");
-          const phone = onlyDigits(formatBrazilPhone(militar?.telefone ?? "") ?? militar?.telefone ?? "");
-          window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
-        } else {
-          toast.success("Cobrança enviada via Z-API");
-        }
-      });
-      return;
-    }
+  const enviarWhats = async (militar: any, msg: string) => {
     const phone = onlyDigits(formatBrazilPhone(militar?.telefone ?? "") ?? militar?.telefone ?? "");
+
+    // Chama Z-API diretamente do frontend (sem depender de Edge Function)
+    if (config?.z_api_instance && config?.z_api_token) {
+      try {
+        // Normaliza telefone: remove DDI se presente, re-adiciona 55
+        let digits = phone;
+        if (digits.startsWith("55") && digits.length > 11) digits = digits.slice(2);
+        const zapiPhone = digits.length >= 10 ? `55${digits}` : phone;
+
+        const url = `https://api.z-api.io/instances/${config.z_api_instance}/token/${config.z_api_token}/send-text`;
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(config.z_api_client_token ? { "Client-Token": config.z_api_client_token } : {}),
+          },
+          body: JSON.stringify({ phone: zapiPhone, message: msg }),
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (resp.ok) {
+          toast.success("Cobrança enviada via WhatsApp");
+          return;
+        }
+        toast.error(`Falha Z-API (${resp.status}): ${(body as any)?.error ?? "erro desconhecido"}. Abrindo WhatsApp manual.`);
+      } catch (e: any) {
+        toast.error(`Erro ao conectar Z-API: ${e.message}. Abrindo WhatsApp manual.`);
+      }
+    }
+
+    // Fallback: abre WhatsApp manual
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
   };
 
