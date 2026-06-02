@@ -314,8 +314,27 @@ export async function getConfig(): Promise<Configuracoes> {
 
 export async function saveConfig(c: Partial<Configuracoes>) {
   const uid = await getUid();
-  const { error } = await supabase.from("configuracoes" as any).upsert({ ...c, user_id: uid }, { onConflict: "user_id" });
-  if (error) throw error;
+  // Verifica se já existe linha para este usuário
+  const { data: existing } = await supabase
+    .from("configuracoes" as any)
+    .select("id")
+    .eq("user_id", uid)
+    .maybeSingle();
+
+  if (existing) {
+    // Atualiza linha existente
+    const { error } = await supabase
+      .from("configuracoes" as any)
+      .update({ ...c, user_id: uid })
+      .eq("user_id", uid);
+    if (error) throw error;
+  } else {
+    // Cria nova linha
+    const { error } = await supabase
+      .from("configuracoes" as any)
+      .insert({ ...c, user_id: uid });
+    if (error) throw error;
+  }
 }
 
 // ─── Cobrança agendada ────────────────────────────────────────────────────────
