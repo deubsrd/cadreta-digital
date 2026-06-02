@@ -132,23 +132,6 @@ export type CobrancaLog = {
   enviado_at: string;
 };
 
-export type PixCobranca = {
-  id: string;
-  militar_id: string;
-  periodo: string;
-  valor: number;
-  txid: string;
-  mp_payment_id: string | null;
-  qr_code_base64: string | null;
-  copia_cola: string | null;
-  ticket_url: string | null;
-  status: string;
-  paid_amount: number | null;
-  paid_at: string | null;
-  needs_review: boolean;
-  created_at: string;
-  updated_at: string;
-};
 
 
 
@@ -266,7 +249,7 @@ export async function getConfig(): Promise<Configuracoes> {
       frequencia_cobranca_dias: 3,
       horario_cobranca: "09:00",
       z_api_instance: "", z_api_token: "", z_api_client_token: "",
-      admin_phone: "", mp_access_token: "",
+      admin_phone: "",
     };
     const { data: created, error: createErr } = await supabase
       .from("configuracoes" as any)

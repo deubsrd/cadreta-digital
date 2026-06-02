@@ -135,7 +135,7 @@ function ComprasPage() {
                     <Button size="icon" variant="ghost" onClick={() => { setEditing(c); setOpen(true); }}><Pencil className="h-4 w-4" /></Button>
                     <Button size="icon" variant="ghost" onClick={async () => {
                       if (!confirm("Excluir compra?")) return;
-                      try { await deleteCompra(c.id); toast.success("Compra excluída"); qc.invalidateQueries(); }
+                      try { await deleteCompra(c.id); toast.success("Compra excluída"); qc.invalidateQueries({ queryKey: ["compras", uid] }); }
                       catch (e: any) { toast.error(e.message); }
                     }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                   </td>
