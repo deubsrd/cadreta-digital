@@ -314,6 +314,21 @@ export async function getConfig(): Promise<Configuracoes> {
 
 export async function saveConfig(c: Partial<Configuracoes>) {
   const uid = await getUid();
+
+  // Remove campos que não devem ser enviados ao banco
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id, user_id: _uid, updated_at, proxima_cobranca, frequencia_cobranca_dias, horario_cobranca, mp_access_token, ...rest } = c as any;
+  const payload = {
+    pix_key: rest.pix_key ?? "",
+    pix_nome: rest.pix_nome ?? "",
+    mensagem_template: rest.mensagem_template ?? "",
+    z_api_instance: rest.z_api_instance ?? "",
+    z_api_token: rest.z_api_token ?? "",
+    z_api_client_token: rest.z_api_client_token ?? "",
+    admin_phone: rest.admin_phone ?? "",
+    user_id: uid,
+  };
+
   // Verifica se já existe linha para este usuário
   const { data: existing } = await supabase
     .from("configuracoes" as any)
@@ -322,17 +337,15 @@ export async function saveConfig(c: Partial<Configuracoes>) {
     .maybeSingle();
 
   if (existing) {
-    // Atualiza linha existente
     const { error } = await supabase
       .from("configuracoes" as any)
-      .update({ ...c, user_id: uid })
+      .update(payload)
       .eq("user_id", uid);
     if (error) throw error;
   } else {
-    // Cria nova linha
     const { error } = await supabase
       .from("configuracoes" as any)
-      .insert({ ...c, user_id: uid });
+      .insert(payload);
     if (error) throw error;
   }
 }
