@@ -143,7 +143,28 @@ function AgendamentosSection() {
               <div className="flex items-center gap-2">
                 <Switch
                   checked={ag.ativo}
-                  onCheckedChange={(v) => update(ag.id, { ativo: v })}
+                  disabled={busyIds.has(ag.id)}
+                  onCheckedChange={async (v) => {
+                    update(ag.id, { ativo: v });
+                    setBusyIds((s) => new Set(s).add(ag.id));
+                    try {
+                      await saveAgendamento({
+                        id: ag.id,
+                        ativo: v,
+                        scheduled_at: localToIso(ag._date, ag._time),
+                        intervalo_min: ag.intervalo_min,
+                        intervalo_max: ag.intervalo_max,
+                        executado_at: null,
+                      });
+                      toast.success(`Cobrança ${ag.id} ${v ? "ativada" : "desativada"}`);
+                      qc.invalidateQueries({ queryKey: ["agendamentos", uid] });
+                    } catch (e: any) {
+                      update(ag.id, { ativo: !v });
+                      toast.error(e.message);
+                    } finally {
+                      setBusyIds((s) => { const n = new Set(s); n.delete(ag.id); return n; });
+                    }
+                  }}
                 />
                 <span className="text-xs text-muted-foreground">{ag.ativo ? "Ativa" : "Inativa"}</span>
               </div>
