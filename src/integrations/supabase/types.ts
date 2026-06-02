@@ -16,7 +16,6 @@ export type Database = {
     Tables: {
       cobranca_agendamentos: {
         Row: {
-          user_id: string
           ativo: boolean
           created_at: string
           executado_at: string | null
@@ -25,9 +24,9 @@ export type Database = {
           intervalo_min: number
           scheduled_at: string | null
           updated_at: string
+          user_id: string | null
         }
         Insert: {
-          user_id?: string
           ativo?: boolean
           created_at?: string
           executado_at?: string | null
@@ -36,9 +35,9 @@ export type Database = {
           intervalo_min?: number
           scheduled_at?: string | null
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
-          user_id?: string
           ativo?: boolean
           created_at?: string
           executado_at?: string | null
@@ -47,36 +46,37 @@ export type Database = {
           intervalo_min?: number
           scheduled_at?: string | null
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
       cobranca_logs: {
         Row: {
-          user_id: string
           agendamento_id: number
           enviado_at: string
           erro_msg: string | null
           id: string
           militar_id: string
           status: string
+          user_id: string | null
         }
         Insert: {
-          user_id?: string
           agendamento_id: number
           enviado_at?: string
           erro_msg?: string | null
           id?: string
           militar_id: string
           status?: string
+          user_id?: string | null
         }
         Update: {
-          user_id?: string
           agendamento_id?: number
           enviado_at?: string
           erro_msg?: string | null
           id?: string
           militar_id?: string
           status?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -97,7 +97,6 @@ export type Database = {
       }
       compras: {
         Row: {
-          user_id: string
           created_at: string
           data_compra: string
           id: string
@@ -108,10 +107,10 @@ export type Database = {
           pago_na_hora: boolean
           quantidade: number
           updated_at: string
+          user_id: string | null
           valor: number
         }
         Insert: {
-          user_id?: string
           created_at?: string
           data_compra?: string
           id?: string
@@ -122,10 +121,10 @@ export type Database = {
           pago_na_hora?: boolean
           quantidade?: number
           updated_at?: string
+          user_id?: string | null
           valor: number
         }
         Update: {
-          user_id?: string
           created_at?: string
           data_compra?: string
           id?: string
@@ -136,6 +135,7 @@ export type Database = {
           pago_na_hora?: boolean
           quantidade?: number
           updated_at?: string
+          user_id?: string | null
           valor?: number
         }
         Relationships: [
@@ -157,7 +157,6 @@ export type Database = {
       }
       configuracoes: {
         Row: {
-          user_id: string
           admin_phone: string | null
           frequencia_cobranca_dias: number
           horario_cobranca: string
@@ -168,12 +167,12 @@ export type Database = {
           pix_nome: string | null
           proxima_cobranca: string | null
           updated_at: string
+          user_id: string | null
           z_api_client_token: string | null
           z_api_instance: string | null
           z_api_token: string | null
         }
         Insert: {
-          user_id?: string
           admin_phone?: string | null
           frequencia_cobranca_dias?: number
           horario_cobranca?: string
@@ -184,12 +183,12 @@ export type Database = {
           pix_nome?: string | null
           proxima_cobranca?: string | null
           updated_at?: string
+          user_id?: string | null
           z_api_client_token?: string | null
           z_api_instance?: string | null
           z_api_token?: string | null
         }
         Update: {
-          user_id?: string
           admin_phone?: string | null
           frequencia_cobranca_dias?: number
           horario_cobranca?: string
@@ -200,6 +199,7 @@ export type Database = {
           pix_nome?: string | null
           proxima_cobranca?: string | null
           updated_at?: string
+          user_id?: string | null
           z_api_client_token?: string | null
           z_api_instance?: string | null
           z_api_token?: string | null
@@ -208,28 +208,28 @@ export type Database = {
       }
       item_price_history: {
         Row: {
-          user_id: string
           changed_at: string
           id: string
           item_id: string
           preco_avista: number
           preco_fiado: number
+          user_id: string | null
         }
         Insert: {
-          user_id?: string
           changed_at?: string
           id?: string
           item_id: string
           preco_avista: number
           preco_fiado: number
+          user_id?: string | null
         }
         Update: {
-          user_id?: string
           changed_at?: string
           id?: string
           item_id?: string
           preco_avista?: number
           preco_fiado?: number
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -243,7 +243,6 @@ export type Database = {
       }
       itens: {
         Row: {
-          user_id: string
           ativo: boolean
           categoria: string | null
           created_at: string
@@ -253,9 +252,9 @@ export type Database = {
           preco_avista: number
           preco_fiado: number
           updated_at: string
+          user_id: string | null
         }
         Insert: {
-          user_id?: string
           ativo?: boolean
           categoria?: string | null
           created_at?: string
@@ -265,9 +264,9 @@ export type Database = {
           preco_avista?: number
           preco_fiado?: number
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
-          user_id?: string
           ativo?: boolean
           categoria?: string | null
           created_at?: string
@@ -277,12 +276,12 @@ export type Database = {
           preco_avista?: number
           preco_fiado?: number
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
       militares: {
         Row: {
-          user_id: string
           ativo: boolean
           created_at: string
           id: string
@@ -290,9 +289,9 @@ export type Database = {
           posto: string
           telefone: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
-          user_id?: string
           ativo?: boolean
           created_at?: string
           id?: string
@@ -300,9 +299,9 @@ export type Database = {
           posto: string
           telefone: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
-          user_id?: string
           ativo?: boolean
           created_at?: string
           id?: string
@@ -310,38 +309,39 @@ export type Database = {
           posto?: string
           telefone?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
       pagamentos: {
         Row: {
-          user_id: string
           created_at: string
           id: string
           militar_id: string
           observacoes: string | null
           pago_em: string
           periodo: string
+          user_id: string | null
           valor: number
         }
         Insert: {
-          user_id?: string
           created_at?: string
           id?: string
           militar_id: string
           observacoes?: string | null
           pago_em?: string
           periodo: string
+          user_id?: string | null
           valor: number
         }
         Update: {
-          user_id?: string
           created_at?: string
           id?: string
           militar_id?: string
           observacoes?: string | null
           pago_em?: string
           periodo?: string
+          user_id?: string | null
           valor?: number
         }
         Relationships: [
@@ -356,7 +356,6 @@ export type Database = {
       }
       pix_cobrancas: {
         Row: {
-          user_id: string
           copia_cola: string | null
           created_at: string
           id: string
@@ -372,10 +371,10 @@ export type Database = {
           ticket_url: string | null
           txid: string
           updated_at: string
+          user_id: string | null
           valor: number
         }
         Insert: {
-          user_id?: string
           copia_cola?: string | null
           created_at?: string
           id?: string
@@ -391,10 +390,10 @@ export type Database = {
           ticket_url?: string | null
           txid: string
           updated_at?: string
+          user_id?: string | null
           valor: number
         }
         Update: {
-          user_id?: string
           copia_cola?: string | null
           created_at?: string
           id?: string
@@ -410,28 +409,29 @@ export type Database = {
           ticket_url?: string | null
           txid?: string
           updated_at?: string
+          user_id?: string | null
           valor?: number
         }
         Relationships: []
       }
       user_roles: {
         Row: {
-          user_id: string
           created_at: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
+          user_id: string
         }
         Insert: {
-          user_id?: string
           created_at?: string
           id?: string
           role: Database["public"]["Enums"]["app_role"]
+          user_id: string
         }
         Update: {
-          user_id?: string
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
