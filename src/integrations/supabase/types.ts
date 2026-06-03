@@ -50,6 +50,63 @@ export type Database = {
         }
         Relationships: []
       }
+      cobranca_fila: {
+        Row: {
+          agendamento_id: number
+          criado_at: string
+          enviado_at: string | null
+          erro_msg: string | null
+          id: string
+          mensagem: string
+          militar_id: string
+          proxima_tentativa_at: string
+          status: string
+          tentativas: number
+          user_id: string
+        }
+        Insert: {
+          agendamento_id: number
+          criado_at?: string
+          enviado_at?: string | null
+          erro_msg?: string | null
+          id?: string
+          mensagem: string
+          militar_id: string
+          proxima_tentativa_at?: string
+          status?: string
+          tentativas?: number
+          user_id: string
+        }
+        Update: {
+          agendamento_id?: number
+          criado_at?: string
+          enviado_at?: string | null
+          erro_msg?: string | null
+          id?: string
+          mensagem?: string
+          militar_id?: string
+          proxima_tentativa_at?: string
+          status?: string
+          tentativas?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_fila_agendamento_id_fkey"
+            columns: ["agendamento_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_agendamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_fila_militar_id_fkey"
+            columns: ["militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cobranca_logs: {
         Row: {
           agendamento_id: number
