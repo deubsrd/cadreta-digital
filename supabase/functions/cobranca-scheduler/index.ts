@@ -13,7 +13,6 @@ function phoneForZApi(raw: string): string {
   return `55${d}`;
 }
 function militarLabel(m: any) { return m ? `${m.posto} ${m.nome_guerra}` : "Desconhecido"; }
-function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 function randInt(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
 function humanizeTemplate(template: string, tentativa: number): string {
@@ -23,13 +22,14 @@ function humanizeTemplate(template: string, tentativa: number): string {
   return template.replace(/^(\s*)(.)/m, `$1${prefix}$2`);
 }
 
-const START_TIME = Date.now();
-function nearTimeout() { return Date.now() - START_TIME > 350_000; }
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-scheduler-secret",
 };
+
+function json(b: unknown, status = 200) {
+  return new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json", ...corsHeaders } });
+}
 
 // ─── main ───────────────────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
@@ -45,47 +45,31 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  try {
-    const nowUtc = new Date();
+  const nowUtc = new Date();
+  const periodo = ymd(new Date(nowUtc.getFullYear(), nowUtc.getMonth(), 1));
+  const fromDate = periodo;
+  const toDate = ymd(new Date(nowUtc.getFullYear(), nowUtc.getMonth() + 1, 0));
+  const periodoLabel = new Date(periodo + "T12:00:00Z").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
-    // 1. Busca agendamentos ativos com scheduled_at <= agora e ainda não executados
-    //    Inclui user_id para processar cada tenant separadamente
-    const { data: agendamentos, error: agErr } = await admin
-      .from("cobranca_agendamentos")
-      .select("*")
-      .eq("ativo", true)
-      .is("executado_at", null)
-      .lte("scheduled_at", nowUtc.toISOString())
-      .order("scheduled_at", { ascending: true });
+  // ── FASE 1: Popular fila para agendamentos que chegou a hora ──────────────
+  const { data: agendamentos } = await admin
+    .from("cobranca_agendamentos")
+    .select("*")
+    .eq("ativo", true)
+    .is("executado_at", null)
+    .lte("scheduled_at", nowUtc.toISOString())
+    .order("scheduled_at", { ascending: true });
 
-    if (agErr) throw agErr;
-    if (!agendamentos || agendamentos.length === 0) {
-      return new Response(JSON.stringify({ ok: true, skipped: "nenhum agendamento pendente" }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
-    }
-
-    // 2. Agrupa agendamentos por user_id — cada tenant processado isoladamente
+  if (agendamentos && agendamentos.length > 0) {
+    // Agrupa por tenant
     const porTenant = new Map<string, any[]>();
     for (const ag of agendamentos) {
-      const uid = ag.user_id;
-      if (!uid) continue;
-      if (!porTenant.has(uid)) porTenant.set(uid, []);
-      porTenant.get(uid)!.push(ag);
+      if (!ag.user_id) continue;
+      if (!porTenant.has(ag.user_id)) porTenant.set(ag.user_id, []);
+      porTenant.get(ag.user_id)!.push(ag);
     }
 
-    const periodo = ymd(new Date(nowUtc.getFullYear(), nowUtc.getMonth(), 1));
-    const fromDate = periodo;
-    const toDate = ymd(new Date(nowUtc.getFullYear(), nowUtc.getMonth() + 1, 0));
-    const periodoLabel = new Date(periodo + "T12:00:00Z").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-
-    const resultsByAg: Record<number, any> = {};
-
-    // 3. Processa cada tenant separadamente — NUNCA mistura dados entre clientes
-    for (const [tenantUid, agsDoTenant] of porTenant.entries()) {
-      if (nearTimeout()) break;
-
-      // Carrega dados APENAS deste tenant
+    for (const [tenantUid, ags] of porTenant.entries()) {
       const [
         { data: cfg },
         { data: militares },
@@ -94,20 +78,13 @@ Deno.serve(async (req: Request) => {
       ] = await Promise.all([
         admin.from("configuracoes").select("*").eq("user_id", tenantUid).maybeSingle(),
         admin.from("militares").select("*").eq("user_id", tenantUid).eq("ativo", true),
-        // TODAS as compras fiadas em aberto (qualquer mês, não só o atual)
-        admin.from("compras").select("*").eq("user_id", tenantUid).eq("pago_na_hora", false),
-        // TODOS os pagamentos do tenant (para detectar qualquer período já quitado)
-        admin.from("pagamentos").select("*").eq("user_id", tenantUid),
+        admin.from("compras").select("*").eq("user_id", tenantUid).gte("data_compra", fromDate).lte("data_compra", toDate).eq("pago_na_hora", false),
+        admin.from("pagamentos").select("*").eq("user_id", tenantUid).eq("periodo", periodo),
       ]);
 
-      if (!cfg) {
-        console.warn(`Tenant ${tenantUid} sem configuração — pulando`);
-        continue;
-      }
+      if (!cfg) continue;
 
-      const zapiOk = !!(cfg.z_api_instance && cfg.z_api_token);
-
-      // Monta totais por militar+período para este tenant
+      // Monta totais por militar+período
       const totalsByMil = new Map<string, { total: number; itens: string[] }>();
       for (const comp of compras ?? []) {
         const d = new Date(comp.data_compra + "T12:00:00Z");
@@ -124,47 +101,34 @@ Deno.serve(async (req: Request) => {
         [...totalsByMil.keys()].some((k) => k.startsWith(m.id + "|") && !pagosSet.has(k))
       );
 
-      // Processa agendamentos deste tenant
-      for (const ag of agsDoTenant) {
-        if (nearTimeout()) break;
+      for (const ag of ags) {
+        // Marca agendamento como executado imediatamente (evita duplo disparo)
+        await admin.from("cobranca_agendamentos")
+          .update({ executado_at: nowUtc.toISOString() })
+          .eq("id", ag.id).eq("user_id", tenantUid);
 
         const tentativa = ag.id;
         const minSeg = Math.max(10, ag.intervalo_min ?? 30);
         const maxSeg = Math.max(minSeg + 5, ag.intervalo_max ?? 120);
-        const logs: any[] = [];
 
-        // Marca executado antes de começar (evita duplo disparo)
-        const { error: markErr } = await admin
-          .from("cobranca_agendamentos")
-          .update({ executado_at: nowUtc.toISOString() })
-          .eq("id", ag.id)
-          .eq("user_id", tenantUid);
+        // Monta fila com delay escalonado entre cada item
+        const filaRows: any[] = [];
+        let delayAcumulado = 0;
 
-        if (markErr) { console.error(`Falha ao marcar ag ${ag.id}:`, markErr); continue; }
+        for (const mil of inadimplentes as any[]) {
+          // Verifica se já existe na fila para este agendamento
+          const { data: jaExiste } = await admin.from("cobranca_fila")
+            .select("id").eq("agendamento_id", ag.id).eq("militar_id", mil.id).maybeSingle();
+          if (jaExiste) continue;
 
-        for (let i = 0; i < inadimplentes.length; i++) {
-          if (nearTimeout()) break;
-
-          const mil = inadimplentes[i] as any;
-
-          // Reconfirma pagamentos em tempo real (apenas deste tenant)
-          const { data: pgCheck } = await admin.from("pagamentos")
-            .select("periodo").eq("militar_id", mil.id).eq("user_id", tenantUid);
-          const periodosPagos = new Set((pgCheck ?? []).map((p: any) => p.periodo));
-
+          // Meses pendentes
           const mesesPendentes: { periodo: string; total: number; itens: string[] }[] = [];
           for (const [p, v] of totalsByMil.entries()) {
-            if (p.startsWith(mil.id + "|")) {
-              const perStr = p.split("|")[1];
-              if (!periodosPagos.has(perStr)) mesesPendentes.push({ periodo: perStr, total: v.total, itens: v.itens });
+            if (p.startsWith(mil.id + "|") && !pagosSet.has(p)) {
+              mesesPendentes.push({ periodo: p.split("|")[1], total: v.total, itens: v.itens });
             }
           }
-
-          if (!mesesPendentes.length) {
-            await admin.from("cobranca_logs").insert({ agendamento_id: ag.id, militar_id: mil.id, status: "pulado_pago", user_id: tenantUid });
-            logs.push({ status: "pulado_pago" });
-            continue;
-          }
+          if (!mesesPendentes.length) continue;
 
           const totalGeral = mesesPendentes.reduce((s, m) => s + m.total, 0);
           const isConsolidado = mesesPendentes.length > 1;
@@ -190,63 +154,111 @@ Deno.serve(async (req: Request) => {
             humanizeTemplate(cfg.mensagem_template ?? "", tentativa)
           );
 
-          let status = "enviado";
-          let erroMsg: string | null = null;
+          // Calcula quando este item deve ser enviado (agora + delay acumulado)
+          const proximaTentativa = new Date(nowUtc.getTime() + delayAcumulado * 1000);
+          delayAcumulado += randInt(minSeg, maxSeg);
 
-          if (zapiOk) {
-            try {
-              const r = await fetch(
-                `https://api.z-api.io/instances/${cfg.z_api_instance}/token/${cfg.z_api_token}/send-text`,
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    ...(cfg.z_api_client_token ? { "Client-Token": cfg.z_api_client_token } : {}),
-                  },
-                  body: JSON.stringify({ phone: phoneForZApi(mil.telefone ?? ""), message: msg }),
-                }
-              );
-              if (!r.ok) {
-                erroMsg = `Z-API ${r.status}: ${(await r.text()).slice(0, 200)}`;
-                status = "erro";
-              }
-            } catch (e) {
-              erroMsg = (e as Error).message;
-              status = "erro";
-            }
-          } else {
-            status = "sem_zapi";
-            erroMsg = "Z-API não configurada";
-          }
-
-          await admin.from("cobranca_logs").insert({
-            agendamento_id: ag.id, militar_id: mil.id, status, erro_msg: erroMsg, user_id: tenantUid,
+          filaRows.push({
+            user_id: tenantUid,
+            agendamento_id: ag.id,
+            militar_id: mil.id,
+            mensagem: msg,
+            status: "pendente",
+            proxima_tentativa_at: proximaTentativa.toISOString(),
           });
-          logs.push({ status });
-
-          if (i < inadimplentes.length - 1 && !nearTimeout()) {
-            await sleep(randInt(minSeg, maxSeg) * 1000);
-          }
         }
 
-        resultsByAg[ag.id] = {
-          tenant: tenantUid.slice(0, 8),
-          enviados: logs.filter((l) => l.status === "enviado").length,
-          pulados: logs.filter((l) => l.status === "pulado_pago").length,
-          erros: logs.filter((l) => l.status === "erro").length,
-          sem_zapi: logs.filter((l) => l.status === "sem_zapi").length,
-        };
+        if (filaRows.length > 0) {
+          await admin.from("cobranca_fila").insert(filaRows);
+          console.log(`Agendamento ${ag.id} (tenant ${tenantUid.slice(0,8)}): ${filaRows.length} itens na fila`);
+        }
       }
     }
-
-    return new Response(JSON.stringify({ ok: true, periodo, agendamentos: resultsByAg }), {
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-
-  } catch (e) {
-    console.error("cobranca-scheduler error", e);
-    return new Response(JSON.stringify({ error: (e as Error).message }), {
-      status: 500, headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
   }
+
+  // ── FASE 2: Processar itens pendentes da fila que já passaram do horário ──
+  // Pega até 5 itens por execução (cron roda a cada minuto)
+  const { data: filaPendente } = await admin
+    .from("cobranca_fila")
+    .select("*, militares(telefone, posto, nome_guerra), configuracoes!cobranca_fila_user_id_fkey(z_api_instance, z_api_token, z_api_client_token)")
+    .eq("status", "pendente")
+    .lte("proxima_tentativa_at", nowUtc.toISOString())
+    .order("proxima_tentativa_at", { ascending: true })
+    .limit(5);
+
+  const resultadoEnvios: any[] = [];
+
+  for (const item of filaPendente ?? []) {
+    // Verifica se militar já pagou antes de enviar
+    const { data: pgCheck } = await admin.from("pagamentos")
+      .select("id").eq("militar_id", item.militar_id).eq("user_id", item.user_id).limit(1);
+
+    if (pgCheck && pgCheck.length > 0) {
+      await admin.from("cobranca_fila").update({ status: "pulado", enviado_at: nowUtc.toISOString() }).eq("id", item.id);
+      await admin.from("cobranca_logs").insert({ agendamento_id: item.agendamento_id, militar_id: item.militar_id, status: "pulado_pago", user_id: item.user_id });
+      resultadoEnvios.push({ id: item.id, status: "pulado" });
+      continue;
+    }
+
+    const cfg = (item as any).configuracoes;
+    const telefone = (item as any).militares?.telefone ?? "";
+
+    if (!cfg?.z_api_instance || !cfg?.z_api_token) {
+      await admin.from("cobranca_fila").update({ status: "erro", erro_msg: "Z-API não configurado", tentativas: item.tentativas + 1 }).eq("id", item.id);
+      await admin.from("cobranca_logs").insert({ agendamento_id: item.agendamento_id, militar_id: item.militar_id, status: "sem_zapi", erro_msg: "Z-API não configurado", user_id: item.user_id });
+      resultadoEnvios.push({ id: item.id, status: "sem_zapi" });
+      continue;
+    }
+
+    let status = "enviado";
+    let erroMsg: string | null = null;
+
+    try {
+      const r = await fetch(
+        `https://api.z-api.io/instances/${cfg.z_api_instance}/token/${cfg.z_api_token}/send-text`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(cfg.z_api_client_token ? { "Client-Token": cfg.z_api_client_token } : {}),
+          },
+          body: JSON.stringify({ phone: phoneForZApi(telefone), message: item.mensagem }),
+        }
+      );
+      if (!r.ok) {
+        erroMsg = `Z-API ${r.status}: ${(await r.text()).slice(0, 200)}`;
+        status = "erro";
+      }
+    } catch (e) {
+      erroMsg = (e as Error).message;
+      status = "erro";
+    }
+
+    await admin.from("cobranca_fila").update({
+      status,
+      erro_msg: erroMsg,
+      enviado_at: status === "enviado" ? nowUtc.toISOString() : null,
+      tentativas: item.tentativas + 1,
+      // Se deu erro, tenta novamente em 5 minutos
+      proxima_tentativa_at: status === "erro" ? new Date(nowUtc.getTime() + 5 * 60 * 1000).toISOString() : null,
+    }).eq("id", item.id);
+
+    await admin.from("cobranca_logs").insert({
+      agendamento_id: item.agendamento_id,
+      militar_id: item.militar_id,
+      status,
+      erro_msg: erroMsg,
+      user_id: item.user_id,
+    });
+
+    resultadoEnvios.push({ id: item.id, status });
+    console.log(`Fila ${item.id}: ${status}${erroMsg ? ` — ${erroMsg}` : ""}`);
+  }
+
+  return json({
+    ok: true,
+    agendamentos_populados: agendamentos?.length ?? 0,
+    envios: resultadoEnvios.length,
+    resultados: resultadoEnvios,
+  });
 });
