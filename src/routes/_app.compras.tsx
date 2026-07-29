@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Search, FileDown, Check, ChevronsUpDown, X, Wallet, Clock, Upload, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -392,6 +393,7 @@ type ImpRow = {
   observacoes: string;
   item_id?: string;
   _error?: string;
+  _suggestion?: { militar: Militar; score: number } | null;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -429,32 +431,92 @@ function parseBool(v: any): boolean {
   return s === "sim" || s === "s" || s === "true" || s === "1" || s === "yes" || s === "y";
 }
 
+
+// ─── Fuzzy matching para nomes de militares ──────────────────────────────────
+
+// Normaliza string: minúsculas, sem acento, sem espaço duplo
+function normalize(s: string): string {
+  return s.trim().toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+// Distância de Levenshtein entre duas strings
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+}
+
+// Retorna o militar mais similar e o score (0-1, sendo 1 = igual)
+function findBestMatch(nome: string, militares: Militar[]): { militar: Militar; score: number; exact: boolean } | null {
+  if (!nome.trim() || !militares.length) return null;
+  const normNome = normalize(nome);
+  let best: Militar | null = null;
+  let bestScore = -1;
+  let bestExact = false;
+
+  for (const m of militares) {
+    const normM = normalize(m.nome_guerra);
+    // Match exato normalizado
+    if (normM === normNome) return { militar: m, score: 1, exact: true };
+    // Score por Levenshtein
+    const maxLen = Math.max(normNome.length, normM.length);
+    const dist = levenshtein(normNome, normM);
+    const score = maxLen === 0 ? 1 : 1 - dist / maxLen;
+    // Bonus: nome contido no outro (ex: "SILVA" encontra "SD SILVA")
+    const bonus = normM.includes(normNome) || normNome.includes(normM) ? 0.1 : 0;
+    const finalScore = Math.min(1, score + bonus);
+    if (finalScore > bestScore) { bestScore = finalScore; best = m; bestExact = false; }
+  }
+  if (!best) return null;
+  return { militar: best, score: bestScore, exact: false };
+}
+
 function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boolean; setOpen: (b: boolean) => void; militares: Militar[]; onDone: () => void }) {
   const [rows, setRows] = useState<ImpRow[]>([]);
   const [busy, setBusy] = useState(false);
+  const [dataUnica, setDataUnica] = useState("");
+  const [usarDataUnica, setUsarDataUnica] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const militaresByName = useMemo(() => {
-    const map = new Map<string, Militar>();
-    militares.forEach((m) => map.set(m.nome_guerra.trim().toLowerCase(), m));
-    return map;
-  }, [militares]);
+  // Threshold: acima de 0.75 aplica automaticamente; entre 0.5 e 0.75 sugere
+  const FUZZY_AUTO = 0.82;
+  const FUZZY_SUGGEST = 0.50;
 
   const validate = (list: ImpRow[]): ImpRow[] => {
     return list.map((r) => {
       let _error: string | undefined;
+      let _suggestion: ImpRow["_suggestion"] = null;
       let militar_id = r.militar_id;
+
       if (!militar_id && r.militar_nome) {
-        const found = militaresByName.get(r.militar_nome.trim().toLowerCase());
-        if (found) militar_id = found.id;
+        const match = findBestMatch(r.militar_nome, militares);
+        if (match) {
+          if (match.exact || match.score >= FUZZY_AUTO) {
+            // Match automático — aplica silenciosamente
+            militar_id = match.militar.id;
+          } else if (match.score >= FUZZY_SUGGEST) {
+            // Match provável — sugere ao usuário
+            _suggestion = { militar: match.militar, score: match.score };
+          }
+        }
       }
+
+      const dataParaValidar = usarDataUnica && dataUnica ? dataUnica : r.data_compra;
       const valorNum = parseFloat(r.valor);
-      if (!r.data_compra || !/^\d{4}-\d{2}-\d{2}$/.test(r.data_compra)) _error = "Data inválida";
-      else if (!militar_id) _error = `Militar não encontrado: ${r.militar_nome || "(vazio)"}`;
+      if (!dataParaValidar || !/^\d{4}-\d{2}-\d{2}$/.test(dataParaValidar)) _error = "Data inválida";
+      else if (!militar_id && !_suggestion) _error = `Militar não encontrado: ${r.militar_nome || "(vazio)"}`;
+      else if (_suggestion && !militar_id) _error = `Confirme o militar: ${_suggestion.militar.nome_guerra} (${Math.round(_suggestion.score * 100)}% similar)`;
       else if (!r.itens?.trim()) _error = "Item vazio";
       else if (!r.valor || isNaN(valorNum) || valorNum <= 0) _error = "Valor inválido";
       else if (r.item_id && !UUID_RE.test(r.item_id)) _error = "item_id inválido";
-      return { ...r, militar_id, _error };
+      return { ...r, militar_id, _error, _suggestion };
     });
   };
 
@@ -491,6 +553,16 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
   };
   const removeRow = (i: number) => setRows((rs) => rs.filter((_, idx) => idx !== i));
 
+  // Aceita sugestão fuzzy para uma linha
+  const aceitarSugestao = (i: number) => {
+    setRows((rs) => validate(rs.map((r, idx) =>
+      idx === i && r._suggestion ? { ...r, militar_id: r._suggestion.militar.id, militar_nome: r._suggestion.militar.nome_guerra, _suggestion: null } : r
+    )));
+  };
+
+  // Revalida quando dataUnica muda
+  useEffect(() => { if (rows.length) setRows((rs) => validate(rs)); }, [usarDataUnica, dataUnica]);
+
   const valid = rows.filter((r) => !r._error);
   const invalid = rows.filter((r) => r._error);
 
@@ -501,7 +573,7 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
       const qtd = (r: ImpRow) => Math.max(1, parseInt(r.quantidade, 10) || 1);
       await createComprasBulk(valid.map((r) => ({
         militar_id: r.militar_id,
-        data_compra: r.data_compra,
+        data_compra: usarDataUnica && dataUnica ? dataUnica : r.data_compra,
         itens: r.itens,
         valor: parseFloat(r.valor),
         quantidade: qtd(r),
@@ -522,10 +594,19 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
           <DialogTitle>Importar planilha de compras</DialogTitle>
         </DialogHeader>
         {rows.length === 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               A planilha deve conter as colunas: <b>Data</b>, <b>Militar</b> (nome de guerra), <b>Item</b>, <b>Valor</b>, <b>Quantidade</b> (opcional), <b>Pago na hora</b> (Sim/Não), <b>Observações</b> (opcional).
             </p>
+            <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+              <div className="flex items-center gap-3">
+                <Switch checked={usarDataUnica} onCheckedChange={setUsarDataUnica} id="data-unica" />
+                <label htmlFor="data-unica" className="text-sm font-medium cursor-pointer">Usar uma data para todas as compras</label>
+              </div>
+              {usarDataUnica && (
+                <Input type="date" value={dataUnica} onChange={(e) => setDataUnica(e.target.value)} className="max-w-[200px]" />
+              )}
+            </div>
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} className="hidden" />
             <Button onClick={() => fileRef.current?.click()}>
               <Upload className="h-4 w-4 mr-2" /> Selecionar arquivo
@@ -533,9 +614,16 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="flex gap-3 text-sm">
-              <Badge>{valid.length} válidos</Badge>
-              {invalid.length > 0 && <Badge variant="destructive">{invalid.length} com erro</Badge>}
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex gap-3 text-sm">
+                <Badge>{valid.length} válidos</Badge>
+                {invalid.length > 0 && <Badge variant="destructive">{invalid.length} com erro</Badge>}
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+                <Switch checked={usarDataUnica} onCheckedChange={setUsarDataUnica} id="data-unica-2" />
+                <label htmlFor="data-unica-2" className="text-xs text-muted-foreground cursor-pointer">Data única:</label>
+                <Input type="date" value={dataUnica} onChange={(e) => setDataUnica(e.target.value)} className="h-7 text-xs w-36" disabled={!usarDataUnica} />
+              </div>
             </div>
             <div className="max-h-[55vh] overflow-auto border rounded-md">
               <table className="w-full text-sm">
@@ -557,7 +645,15 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
                       <td className="px-2 py-1"><Input className="h-8" type="date" value={r.data_compra} onChange={(e) => updateRow(i, { data_compra: e.target.value })} /></td>
                       <td className="px-2 py-1">
                         <Input className="h-8" value={r.militar_nome} onChange={(e) => updateRow(i, { militar_nome: e.target.value })} />
-                        {r._error && <div className="text-xs text-destructive flex items-center gap-1 mt-1"><AlertTriangle className="h-3 w-3" />{r._error}</div>}
+                        {r._error && r._suggestion && (
+                          <div className="mt-1 space-y-1">
+                            <div className="text-xs text-amber-600 flex items-center gap-1"><AlertTriangle className="h-3 w-3" />{r._error}</div>
+                            <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => aceitarSugestao(i)}>
+                              ✓ Usar "{r._suggestion.militar.nome_guerra}"
+                            </Button>
+                          </div>
+                        )}
+                        {r._error && !r._suggestion && <div className="text-xs text-destructive flex items-center gap-1 mt-1"><AlertTriangle className="h-3 w-3" />{r._error}</div>}
                       </td>
                       <td className="px-2 py-1"><Input className="h-8" value={r.itens} onChange={(e) => updateRow(i, { itens: e.target.value })} /></td>
                       <td className="px-2 py-1"><Input className="h-8" type="number" min="1" value={r.quantidade} onChange={(e) => updateRow(i, { quantidade: e.target.value })} /></td>
