@@ -741,7 +741,14 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
                         )}
                         {r._error && !r._suggestion && <div className="text-xs text-destructive flex items-center gap-1 mt-1"><AlertTriangle className="h-3 w-3" />{r._error}</div>}
                       </td>
-                      <td className="px-2 py-1"><Input className="h-8" value={r.itens} onChange={(e) => updateRow(i, { itens: e.target.value })} /></td>
+                      <td className="px-2 py-1">
+                        <Input className="h-8" value={r.itens} onChange={(e) => updateRow(i, { itens: e.target.value })} />
+                        {r._itemMatch && r._itemOriginal && normalize(r._itemOriginal) !== normalize(r._itemMatch.nome) && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            "{r._itemOriginal}" → <b>{r._itemMatch.nome}</b>{r._itemMatch.categoria ? ` (${r._itemMatch.categoria})` : ""}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-2 py-1"><Input className="h-8" type="number" min="1" value={r.quantidade} onChange={(e) => updateRow(i, { quantidade: e.target.value })} /></td>
                       <td className="px-2 py-1"><Input className="h-8" type="number" step="0.01" value={r.valor} onChange={(e) => updateRow(i, { valor: e.target.value })} /></td>
                       <td className="px-2 py-1 text-center">
