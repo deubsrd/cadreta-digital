@@ -288,8 +288,38 @@ function FaturasPage() {
           {!modoHistorico && <Input type="month" className="max-w-[180px]" value={mes} onChange={(e) => setMes(e.target.value)} />}
           <Button variant="outline" onClick={copiarChavePix}><Copy className="h-4 w-4 mr-2" />Copiar chave PIX</Button>
           {!modoHistorico && <Button variant="outline" onClick={exportPdf}><FileDown className="h-4 w-4 mr-2" />PDF</Button>}
+          <Button variant="destructive" onClick={() => { setResetMes(mes); setResetOpen(true); }}>
+            <Eraser className="h-4 w-4 mr-2" />Resetar mês
+          </Button>
         </div>
       </div>
+
+      <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resetar lançamentos do mês</AlertDialogTitle>
+            <AlertDialogDescription>
+              Escolha o mês que deseja zerar. Todas as compras lançadas nesse período serão apagadas
+              e os pagamentos marcados no mês serão reabertos. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <label className="text-xs text-muted-foreground uppercase tracking-wide">Mês a resetar</label>
+            <Input type="month" value={resetMes} onChange={(e) => setResetMes(e.target.value)} className="max-w-[200px]" />
+            <p className="text-sm capitalize text-muted-foreground">{monthLabel(resetRange.date)}</p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resetBusy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); confirmarReset(); }}
+              disabled={resetBusy}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {resetBusy ? "Resetando..." : "Resetar mês"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Filtros */}
       <Card className="p-4">
