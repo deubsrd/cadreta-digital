@@ -384,6 +384,7 @@ function PdvDialog({ open, setOpen, editing, militares, itens, compras, pagament
 
 type ImpRow = {
   data_compra: string;
+  posto: string;
   militar_nome: string;
   militar_id: string;
   itens: string;
@@ -392,6 +393,8 @@ type ImpRow = {
   pago_na_hora: boolean;
   observacoes: string;
   item_id?: string;
+  _itemOriginal?: string;
+  _itemMatch?: { nome: string; categoria: string | null } | null;
   _error?: string;
   _suggestion?: { militar: Militar; score: number } | null;
 };
