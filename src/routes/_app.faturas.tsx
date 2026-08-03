@@ -80,6 +80,29 @@ function FaturasPage() {
   const [filter, setFilter] = useState<"todos" | "pendentes" | "pagos">("todos");
   const [buscaNome, setBuscaNome] = useState("");
   const [buscaPosto, setBuscaPosto] = useState("todos");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetMes, setResetMes] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
+  const [resetBusy, setResetBusy] = useState(false);
+
+  const resetRange = useMemo(() => {
+    const [y, m] = resetMes.split("-").map(Number);
+    const d = new Date(y, m - 1, 1);
+    return { from: ymd(startOfMonth(d)), to: ymd(endOfMonth(d)), periodo: ymd(startOfMonth(d)), date: d };
+  }, [resetMes]);
+
+  const confirmarReset = async () => {
+    setResetBusy(true);
+    try {
+      const r = await resetarMes(resetRange.from, resetRange.to, resetRange.periodo);
+      toast.success(`Mês resetado — ${r.compras} lançamento(s) removido(s)`);
+      qc.invalidateQueries({ queryKey: ["compras"] });
+      qc.invalidateQueries({ queryKey: ["compras_todas", uid] });
+      qc.invalidateQueries({ queryKey: ["pagamentos", uid] });
+      setResetOpen(false);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setResetBusy(false); }
+  };
+
 
   const range = useMemo(() => {
     const [y, m] = mes.split("-").map(Number);
