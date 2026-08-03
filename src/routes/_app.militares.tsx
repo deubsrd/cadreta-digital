@@ -146,7 +146,7 @@ function MilitarDialog({ open, setOpen, editing, onSaved }: { open: boolean; set
     setBusy(true);
     try {
       // A normalização final (+55 DD NNNNNNNNN) é feita dentro de upsertMilitar → api.ts.
-      await upsertMilitar({ id: editing?.id, posto: posto.trim().toUpperCase(), nome_guerra: nomeGuerra.trim(), telefone: telefone.trim(), ativo });
+      await upsertMilitar({ id: editing?.id, posto: normalizePosto(posto), nome_guerra: nomeGuerra.trim(), telefone: telefone.trim(), ativo });
       toast.success(editing ? "Atualizado" : "Cadastrado");
       onSaved(); setOpen(false); reset();
     } catch (e: any) { toast.error(e.message); }
