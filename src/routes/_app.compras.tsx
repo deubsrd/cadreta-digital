@@ -624,7 +624,13 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
 
 
   const updateRow = (i: number, patch: Partial<ImpRow>) => {
-    setRows((rs) => validate(rs.map((r, idx) => (idx === i ? { ...r, ...patch, militar_id: patch.militar_nome !== undefined ? "" : r.militar_id } : r))));
+    setRows((rs) => validate(rs.map((r, idx) => {
+      if (idx !== i) return r;
+      const next = { ...r, ...patch };
+      if (patch.militar_nome !== undefined || patch.posto !== undefined) next.militar_id = "";
+      if (patch.itens !== undefined) { next.item_id = undefined; next._itemOriginal = patch.itens; next._itemMatch = null; }
+      return next;
+    })));
   };
   const removeRow = (i: number) => setRows((rs) => rs.filter((_, idx) => idx !== i));
 
