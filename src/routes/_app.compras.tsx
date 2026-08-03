@@ -481,7 +481,59 @@ function findBestMatch(nome: string, militares: Militar[]): { militar: Militar; 
   return { militar: best, score: bestScore, exact: false };
 }
 
-function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boolean; setOpen: (b: boolean) => void; militares: Militar[]; onDone: () => void }) {
+// ─── Categorização automática de itens da planilha ───────────────────────────
+// Sinônimos comuns → termo canônico (ajuda a casar "coca"/"fanta" com "Refrigerante")
+const ITEM_SINONIMOS: Record<string, string[]> = {
+  refrigerante: ["coca", "coca cola", "cocacola", "fanta", "guarana", "guaraná", "sprite", "pepsi", "soda", "refri", "refrigerante", "coca zero", "guarana antarctica"],
+  agua: ["agua", "água", "agua mineral", "água mineral", "agua com gas", "h2o"],
+  suco: ["suco", "del valle", "delvalle", "sucos", "nectar", "néctar"],
+  cerveja: ["cerveja", "brahma", "skol", "heineken", "budweiser", "itaipava", "long neck"],
+  energetico: ["energetico", "energético", "red bull", "redbull", "monster", "baly", "tnt"],
+  salgado: ["salgado", "coxinha", "pastel", "empada", "esfiha", "enroladinho", "kibe"],
+  salgadinho: ["salgadinho", "doritos", "cheetos", "ruffles", "fandangos", "batata frita", "chips"],
+  chocolate: ["chocolate", "bis", "kitkat", "kit kat", "sonho de valsa", "talento", "trento", "diamante negro"],
+  biscoito: ["biscoito", "bolacha", "cookies", "trakinas", "oreo", "recheado"],
+  cafe: ["cafe", "café", "cafezinho", "expresso", "espresso"],
+  marmita: ["marmita", "almoco", "almoço", "refeicao", "refeição", "quentinha", "prato feito", "pf"],
+  sanduiche: ["sanduiche", "sanduíche", "lanche", "x-burger", "xburguer", "hamburguer", "hambúrguer", "misto quente"],
+};
+
+function termoCanonico(nome: string): string | null {
+  const n = normalize(nome);
+  for (const [canon, list] of Object.entries(ITEM_SINONIMOS)) {
+    if (list.some((s) => n === normalize(s) || n.includes(normalize(s)))) return canon;
+  }
+  return null;
+}
+
+// Encontra o item cadastrado mais parecido com o texto da planilha
+function findBestItem(nome: string, itens: Item[]): { item: Item; score: number } | null {
+  if (!nome.trim() || !itens.length) return null;
+  const n = normalize(nome);
+  const canon = termoCanonico(nome);
+  let best: Item | null = null;
+  let bestScore = -1;
+
+  for (const it of itens) {
+    const nItem = normalize(it.nome);
+    const nCat = it.categoria ? normalize(it.categoria) : "";
+    if (nItem === n) return { item: it, score: 1 };
+
+    const maxLen = Math.max(n.length, nItem.length);
+    let score = maxLen === 0 ? 0 : 1 - levenshtein(n, nItem) / maxLen;
+    if (nItem.includes(n) || n.includes(nItem)) score = Math.min(1, score + 0.15);
+    // Sinônimo casa com o nome ou com a categoria do item cadastrado
+    if (canon && (nItem.includes(canon) || nCat.includes(canon) || termoCanonico(it.nome) === canon)) {
+      score = Math.max(score, 0.95);
+    }
+    if (nCat && (nCat === n || nCat.includes(n))) score = Math.max(score, 0.9);
+    if (score > bestScore) { bestScore = score; best = it; }
+  }
+  if (!best) return null;
+  return { item: best, score: bestScore };
+}
+
+function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDone }: { open: boolean; setOpen: (b: boolean) => void; militares: Militar[]; itensCadastrados: Item[]; onDone: () => void }) {
   const [rows, setRows] = useState<ImpRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [dataUnica, setDataUnica] = useState("");
