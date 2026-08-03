@@ -261,7 +261,7 @@ function ImportDialog({ open, setOpen, existing, onDone }: { open: boolean; setO
     setBusy(true);
     try {
       await bulkInsertMilitares(valid.map((r) => ({
-        posto: r.posto.trim().toUpperCase(),
+        posto: normalizePosto(r.posto),
         nome_guerra: r.nome_guerra.trim(),
         // formatBrazilPhone é chamado aqui para garantir formato canônico na importação.
         // O campo já passou pela validação em validate(), então o resultado nunca é null aqui.
@@ -295,6 +295,11 @@ function ImportDialog({ open, setOpen, existing, onDone }: { open: boolean; setO
               <Badge>{valid.length} válidos</Badge>
               {invalid.length > 0 && <Badge variant="destructive">{invalid.length} com erro</Badge>}
             </div>
+            <datalist id="postos-list-import">
+              {POSTOS.map((p) => (
+                <option key={p} value={p}>{POSTO_DESCRICAO[p] ?? p}</option>
+              ))}
+            </datalist>
             <div className="max-h-[50vh] overflow-auto border rounded-md">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 sticky top-0">
@@ -308,7 +313,10 @@ function ImportDialog({ open, setOpen, existing, onDone }: { open: boolean; setO
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={i} className={`border-t ${r._error ? "bg-destructive/5" : ""}`}>
-                      <td className="px-2 py-1"><Input className="h-8" value={r.posto} onChange={(e) => updateRow(i, { posto: e.target.value })} /></td>
+                      <td className="px-2 py-1">
+                        <Input className="h-8" list="postos-list-import" value={r.posto} onChange={(e) => updateRow(i, { posto: e.target.value })} />
+                        {r.posto && <div className="text-xs text-muted-foreground mt-1">→ {normalizePosto(r.posto)}</div>}
+                      </td>
                       <td className="px-2 py-1"><Input className="h-8" value={r.nome_guerra} onChange={(e) => updateRow(i, { nome_guerra: e.target.value })} /></td>
                       <td className="px-2 py-1">
                         <Input className="h-8" value={r.telefone} onChange={(e) => updateRow(i, { telefone: e.target.value })} />
