@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel } from "@/lib/api";
+import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel, resetarMes } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { brl, ymd, startOfMonth, endOfMonth, monthLabel, onlyDigits, formatBrazilPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
