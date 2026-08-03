@@ -216,6 +216,37 @@ export async function deleteCompra(id: string) {
   if (error) throw error;
 }
 
+// Apaga TODOS os lançamentos (compras) de um mês e reabre os pagamentos daquele período.
+// Escopo garantido pelo user_id do usuário logado (multi-tenant).
+export async function resetarMes(from: string, to: string, periodo: string) {
+  const uid = await getUid();
+
+  const { data: alvo, error: selErr } = await supabase
+    .from("compras")
+    .select("id")
+    .eq("user_id", uid)
+    .gte("data_compra", from)
+    .lte("data_compra", to);
+  if (selErr) throw selErr;
+
+  const { error: delCompras } = await supabase
+    .from("compras")
+    .delete()
+    .eq("user_id", uid)
+    .gte("data_compra", from)
+    .lte("data_compra", to);
+  if (delCompras) throw delCompras;
+
+  const { error: delPag } = await supabase
+    .from("pagamentos")
+    .delete()
+    .eq("user_id", uid)
+    .eq("periodo", periodo);
+  if (delPag) throw delPag;
+
+  return { compras: alvo?.length ?? 0 };
+}
+
 export async function listPagamentos() {
   const { data, error } = await supabase.from("pagamentos").select("*").order("pago_em", { ascending: false });
   if (error) throw error;

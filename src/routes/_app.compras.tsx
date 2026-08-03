@@ -151,7 +151,7 @@ function ComprasPage() {
       </Card>
 
       <PdvDialog open={open} setOpen={setOpen} editing={editing} militares={militares} itens={itens} compras={compras} pagamentos={pagamentos} onSaved={() => { qc.invalidateQueries({ queryKey: ["compras", uid] }); qc.invalidateQueries({ queryKey: ["pagamentos", uid] }); }} />
-      <ImportComprasDialog open={importOpen} setOpen={setImportOpen} militares={militares} onDone={() => qc.invalidateQueries({ queryKey: ["compras", uid] })} />
+      <ImportComprasDialog open={importOpen} setOpen={setImportOpen} militares={militares} itensCadastrados={itens} onDone={() => qc.invalidateQueries({ queryKey: ["compras", uid] })} />
     </div>
   );
 }
@@ -384,6 +384,7 @@ function PdvDialog({ open, setOpen, editing, militares, itens, compras, pagament
 
 type ImpRow = {
   data_compra: string;
+  posto: string;
   militar_nome: string;
   militar_id: string;
   itens: string;
@@ -392,6 +393,8 @@ type ImpRow = {
   pago_na_hora: boolean;
   observacoes: string;
   item_id?: string;
+  _itemOriginal?: string;
+  _itemMatch?: { nome: string; categoria: string | null } | null;
   _error?: string;
   _suggestion?: { militar: Militar; score: number } | null;
 };
@@ -478,7 +481,59 @@ function findBestMatch(nome: string, militares: Militar[]): { militar: Militar; 
   return { militar: best, score: bestScore, exact: false };
 }
 
-function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boolean; setOpen: (b: boolean) => void; militares: Militar[]; onDone: () => void }) {
+// ─── Categorização automática de itens da planilha ───────────────────────────
+// Sinônimos comuns → termo canônico (ajuda a casar "coca"/"fanta" com "Refrigerante")
+const ITEM_SINONIMOS: Record<string, string[]> = {
+  refrigerante: ["coca", "coca cola", "cocacola", "fanta", "guarana", "guaraná", "sprite", "pepsi", "soda", "refri", "refrigerante", "coca zero", "guarana antarctica"],
+  agua: ["agua", "água", "agua mineral", "água mineral", "agua com gas", "h2o"],
+  suco: ["suco", "del valle", "delvalle", "sucos", "nectar", "néctar"],
+  cerveja: ["cerveja", "brahma", "skol", "heineken", "budweiser", "itaipava", "long neck"],
+  energetico: ["energetico", "energético", "red bull", "redbull", "monster", "baly", "tnt"],
+  salgado: ["salgado", "coxinha", "pastel", "empada", "esfiha", "enroladinho", "kibe"],
+  salgadinho: ["salgadinho", "doritos", "cheetos", "ruffles", "fandangos", "batata frita", "chips"],
+  chocolate: ["chocolate", "bis", "kitkat", "kit kat", "sonho de valsa", "talento", "trento", "diamante negro"],
+  biscoito: ["biscoito", "bolacha", "cookies", "trakinas", "oreo", "recheado"],
+  cafe: ["cafe", "café", "cafezinho", "expresso", "espresso"],
+  marmita: ["marmita", "almoco", "almoço", "refeicao", "refeição", "quentinha", "prato feito", "pf"],
+  sanduiche: ["sanduiche", "sanduíche", "lanche", "x-burger", "xburguer", "hamburguer", "hambúrguer", "misto quente"],
+};
+
+function termoCanonico(nome: string): string | null {
+  const n = normalize(nome);
+  for (const [canon, list] of Object.entries(ITEM_SINONIMOS)) {
+    if (list.some((s) => n === normalize(s) || n.includes(normalize(s)))) return canon;
+  }
+  return null;
+}
+
+// Encontra o item cadastrado mais parecido com o texto da planilha
+function findBestItem(nome: string, itens: Item[]): { item: Item; score: number } | null {
+  if (!nome.trim() || !itens.length) return null;
+  const n = normalize(nome);
+  const canon = termoCanonico(nome);
+  let best: Item | null = null;
+  let bestScore = -1;
+
+  for (const it of itens) {
+    const nItem = normalize(it.nome);
+    const nCat = it.categoria ? normalize(it.categoria) : "";
+    if (nItem === n) return { item: it, score: 1 };
+
+    const maxLen = Math.max(n.length, nItem.length);
+    let score = maxLen === 0 ? 0 : 1 - levenshtein(n, nItem) / maxLen;
+    if (nItem.includes(n) || n.includes(nItem)) score = Math.min(1, score + 0.15);
+    // Sinônimo casa com o nome ou com a categoria do item cadastrado
+    if (canon && (nItem.includes(canon) || nCat.includes(canon) || termoCanonico(it.nome) === canon)) {
+      score = Math.max(score, 0.95);
+    }
+    if (nCat && (nCat === n || nCat.includes(n))) score = Math.max(score, 0.9);
+    if (score > bestScore) { bestScore = score; best = it; }
+  }
+  if (!best) return null;
+  return { item: best, score: bestScore };
+}
+
+function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDone }: { open: boolean; setOpen: (b: boolean) => void; militares: Militar[]; itensCadastrados: Item[]; onDone: () => void }) {
   const [rows, setRows] = useState<ImpRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [dataUnica, setDataUnica] = useState("");
@@ -496,15 +551,31 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
       let militar_id = r.militar_id;
 
       if (!militar_id && r.militar_nome) {
-        const match = findBestMatch(r.militar_nome, militares);
+        // Se a planilha trouxe o posto/graduação, restringe os candidatos a esse posto
+        const nPosto = normalize(r.posto ?? "");
+        const candidatos = nPosto ? militares.filter((m) => normalize(m.posto) === nPosto) : militares;
+        const pool = candidatos.length ? candidatos : militares;
+        const match = findBestMatch(r.militar_nome, pool);
         if (match) {
           if (match.exact || match.score >= FUZZY_AUTO) {
-            // Match automático — aplica silenciosamente
             militar_id = match.militar.id;
           } else if (match.score >= FUZZY_SUGGEST) {
-            // Match provável — sugere ao usuário
             _suggestion = { militar: match.militar, score: match.score };
           }
+        }
+      }
+
+      // Categorização automática do item conforme os itens cadastrados
+      let item_id = r.item_id;
+      let itens = r.itens;
+      let _itemMatch = r._itemMatch ?? null;
+      const textoItem = r._itemOriginal ?? r.itens;
+      if (!item_id && textoItem) {
+        const im = findBestItem(textoItem, itensCadastrados);
+        if (im && im.score >= 0.85) {
+          item_id = im.item.id;
+          itens = im.item.nome;
+          _itemMatch = { nome: im.item.nome, categoria: im.item.categoria };
         }
       }
 
@@ -513,10 +584,10 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
       if (!dataParaValidar || !/^\d{4}-\d{2}-\d{2}$/.test(dataParaValidar)) _error = "Data inválida";
       else if (!militar_id && !_suggestion) _error = `Militar não encontrado: ${r.militar_nome || "(vazio)"}`;
       else if (_suggestion && !militar_id) _error = `Confirme o militar: ${_suggestion.militar.nome_guerra} (${Math.round(_suggestion.score * 100)}% similar)`;
-      else if (!r.itens?.trim()) _error = "Item vazio";
+      else if (!itens?.trim()) _error = "Item vazio";
       else if (!r.valor || isNaN(valorNum) || valorNum <= 0) _error = "Valor inválido";
-      else if (r.item_id && !UUID_RE.test(r.item_id)) _error = "item_id inválido";
-      return { ...r, militar_id, _error, _suggestion };
+      else if (item_id && !UUID_RE.test(item_id)) _error = "item_id inválido";
+      return { ...r, militar_id, itens, item_id, _itemOriginal: textoItem, _itemMatch, _error, _suggestion };
     });
   };
 
@@ -533,23 +604,33 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
       const valorRaw = get("valor", "preco", "preço", "total");
       const qtdRaw = get("quantidade", "qtd");
       const itemIdRaw = String(get("itemid") ?? "").trim();
+      const itemTexto = String(get("item", "produto", "descricao", "descrição", "itens") ?? "").trim();
       return {
         data_compra: parseDateCell(dataRaw),
+        posto: String(get("posto", "postograd", "postogaduacao", "postograduacao", "postogradua", "graduacao", "graduação", "patente") ?? "").trim(),
         militar_nome: String(get("militar", "nomedeguerra", "nomeguerra", "nome") ?? "").trim(),
         militar_id: "",
-        itens: String(get("item", "produto", "descricao", "descrição", "itens") ?? "").trim(),
+        itens: itemTexto,
         valor: parseValor(valorRaw),
         quantidade: qtdRaw === "" || qtdRaw === null || qtdRaw === undefined ? "1" : String(qtdRaw),
         pago_na_hora: parseBool(get("pagonahora", "pago")),
         observacoes: String(get("observacoes", "observações", "obs") ?? "").trim(),
         item_id: itemIdRaw || undefined,
+        _itemOriginal: itemTexto,
       };
     });
     setRows(validate(parsed));
   };
 
+
   const updateRow = (i: number, patch: Partial<ImpRow>) => {
-    setRows((rs) => validate(rs.map((r, idx) => (idx === i ? { ...r, ...patch, militar_id: patch.militar_nome !== undefined ? "" : r.militar_id } : r))));
+    setRows((rs) => validate(rs.map((r, idx) => {
+      if (idx !== i) return r;
+      const next = { ...r, ...patch };
+      if (patch.militar_nome !== undefined || patch.posto !== undefined) next.militar_id = "";
+      if (patch.itens !== undefined) { next.item_id = undefined; next._itemOriginal = patch.itens; next._itemMatch = null; }
+      return next;
+    })));
   };
   const removeRow = (i: number) => setRows((rs) => rs.filter((_, idx) => idx !== i));
 
@@ -596,7 +677,10 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
         {rows.length === 0 ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              A planilha deve conter as colunas: <b>Data</b>, <b>Militar</b> (nome de guerra), <b>Item</b>, <b>Valor</b>, <b>Quantidade</b> (opcional), <b>Pago na hora</b> (Sim/Não), <b>Observações</b> (opcional).
+              A planilha deve conter as colunas: <b>Data</b>, <b>Posto/Graduação</b>, <b>Militar</b> (nome de guerra), <b>Item</b>, <b>Valor</b>, <b>Quantidade</b> (opcional), <b>Pago na hora</b> (Sim/Não), <b>Observações</b> (opcional).
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Os itens são categorizados automaticamente conforme os produtos cadastrados (ex.: "coca" ou "fanta" viram <b>Refrigerante</b>).
             </p>
             <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
               <div className="flex items-center gap-3">
@@ -630,6 +714,7 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
                 <thead className="bg-muted/40 sticky top-0">
                   <tr className="text-left">
                     <th className="px-2 py-2 w-32">Data</th>
+                    <th className="px-2 py-2 w-28">Posto/Grad</th>
                     <th className="px-2 py-2">Militar</th>
                     <th className="px-2 py-2">Item</th>
                     <th className="px-2 py-2 w-16">Qtd</th>
@@ -643,6 +728,7 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
                   {rows.map((r, i) => (
                     <tr key={i} className={`border-t ${r._error ? "bg-destructive/5" : ""}`}>
                       <td className="px-2 py-1"><Input className="h-8" type="date" value={r.data_compra} onChange={(e) => updateRow(i, { data_compra: e.target.value })} /></td>
+                      <td className="px-2 py-1"><Input className="h-8" placeholder="Ex.: SD" value={r.posto} onChange={(e) => updateRow(i, { posto: e.target.value })} /></td>
                       <td className="px-2 py-1">
                         <Input className="h-8" value={r.militar_nome} onChange={(e) => updateRow(i, { militar_nome: e.target.value })} />
                         {r._error && r._suggestion && (
@@ -655,7 +741,14 @@ function ImportComprasDialog({ open, setOpen, militares, onDone }: { open: boole
                         )}
                         {r._error && !r._suggestion && <div className="text-xs text-destructive flex items-center gap-1 mt-1"><AlertTriangle className="h-3 w-3" />{r._error}</div>}
                       </td>
-                      <td className="px-2 py-1"><Input className="h-8" value={r.itens} onChange={(e) => updateRow(i, { itens: e.target.value })} /></td>
+                      <td className="px-2 py-1">
+                        <Input className="h-8" value={r.itens} onChange={(e) => updateRow(i, { itens: e.target.value })} />
+                        {r._itemMatch && r._itemOriginal && normalize(r._itemOriginal) !== normalize(r._itemMatch.nome) && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            "{r._itemOriginal}" → <b>{r._itemMatch.nome}</b>{r._itemMatch.categoria ? ` (${r._itemMatch.categoria})` : ""}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-2 py-1"><Input className="h-8" type="number" min="1" value={r.quantidade} onChange={(e) => updateRow(i, { quantidade: e.target.value })} /></td>
                       <td className="px-2 py-1"><Input className="h-8" type="number" step="0.01" value={r.valor} onChange={(e) => updateRow(i, { valor: e.target.value })} /></td>
                       <td className="px-2 py-1 text-center">

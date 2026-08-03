@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel } from "@/lib/api";
+import { listCompras, listPagamentos, listMilitares, marcarPago, desmarcarPago, getConfig, militarLabel, resetarMes } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { brl, ymd, startOfMonth, endOfMonth, monthLabel, onlyDigits, formatBrazilPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMemo, useState } from "react";
-import { CheckCircle2, MessageCircle, MessageCircleMore, RotateCcw, FileDown, Copy, Search, X, ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircle2, MessageCircle, MessageCircleMore, RotateCcw, FileDown, Copy, Search, X, ChevronDown, ChevronUp, Eraser } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import jsPDF from "jspdf";
@@ -79,6 +80,29 @@ function FaturasPage() {
   const [filter, setFilter] = useState<"todos" | "pendentes" | "pagos">("todos");
   const [buscaNome, setBuscaNome] = useState("");
   const [buscaPosto, setBuscaPosto] = useState("todos");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetMes, setResetMes] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
+  const [resetBusy, setResetBusy] = useState(false);
+
+  const resetRange = useMemo(() => {
+    const [y, m] = resetMes.split("-").map(Number);
+    const d = new Date(y, m - 1, 1);
+    return { from: ymd(startOfMonth(d)), to: ymd(endOfMonth(d)), periodo: ymd(startOfMonth(d)), date: d };
+  }, [resetMes]);
+
+  const confirmarReset = async () => {
+    setResetBusy(true);
+    try {
+      const r = await resetarMes(resetRange.from, resetRange.to, resetRange.periodo);
+      toast.success(`Mês resetado — ${r.compras} lançamento(s) removido(s)`);
+      qc.invalidateQueries({ queryKey: ["compras"] });
+      qc.invalidateQueries({ queryKey: ["compras_todas", uid] });
+      qc.invalidateQueries({ queryKey: ["pagamentos", uid] });
+      setResetOpen(false);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setResetBusy(false); }
+  };
+
 
   const range = useMemo(() => {
     const [y, m] = mes.split("-").map(Number);
@@ -264,8 +288,38 @@ function FaturasPage() {
           {!modoHistorico && <Input type="month" className="max-w-[180px]" value={mes} onChange={(e) => setMes(e.target.value)} />}
           <Button variant="outline" onClick={copiarChavePix}><Copy className="h-4 w-4 mr-2" />Copiar chave PIX</Button>
           {!modoHistorico && <Button variant="outline" onClick={exportPdf}><FileDown className="h-4 w-4 mr-2" />PDF</Button>}
+          <Button variant="destructive" onClick={() => { setResetMes(mes); setResetOpen(true); }}>
+            <Eraser className="h-4 w-4 mr-2" />Resetar mês
+          </Button>
         </div>
       </div>
+
+      <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resetar lançamentos do mês</AlertDialogTitle>
+            <AlertDialogDescription>
+              Escolha o mês que deseja zerar. Todas as compras lançadas nesse período serão apagadas
+              e os pagamentos marcados no mês serão reabertos. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <label className="text-xs text-muted-foreground uppercase tracking-wide">Mês a resetar</label>
+            <Input type="month" value={resetMes} onChange={(e) => setResetMes(e.target.value)} className="max-w-[200px]" />
+            <p className="text-sm capitalize text-muted-foreground">{monthLabel(resetRange.date)}</p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resetBusy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); confirmarReset(); }}
+              disabled={resetBusy}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {resetBusy ? "Resetando..." : "Resetar mês"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Filtros */}
       <Card className="p-4">
