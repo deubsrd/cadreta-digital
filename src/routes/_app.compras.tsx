@@ -551,10 +551,11 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
       let militar_id = r.militar_id;
 
       if (!militar_id && r.militar_nome) {
-        // Se a planilha trouxe o posto/graduação, restringe os candidatos a esse posto
-        const nPosto = normalize(r.posto ?? "");
-        const candidatos = nPosto ? militares.filter((m) => normalize(m.posto) === nPosto) : militares;
-        const pool = candidatos.length ? candidatos : militares;
+        // Se a planilha trouxe o posto/graduação, restringe os candidatos a esse posto.
+        // SD (Efetivo Profissional) e SD EV (Efetivo Variável) são graduações distintas.
+        const nPosto = normalizePosto(r.posto ?? "");
+        const candidatos = nPosto ? militares.filter((m) => normalizePosto(m.posto) === nPosto) : militares;
+        const pool = candidatos.length ? candidatos : (nPosto ? [] : militares);
         const match = findBestMatch(r.militar_nome, pool);
         if (match) {
           if (match.exact || match.score >= FUZZY_AUTO) {
