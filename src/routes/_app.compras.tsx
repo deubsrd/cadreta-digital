@@ -677,7 +677,10 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
         {rows.length === 0 ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              A planilha deve conter as colunas: <b>Data</b>, <b>Militar</b> (nome de guerra), <b>Item</b>, <b>Valor</b>, <b>Quantidade</b> (opcional), <b>Pago na hora</b> (Sim/Não), <b>Observações</b> (opcional).
+              A planilha deve conter as colunas: <b>Data</b>, <b>Posto/Graduação</b>, <b>Militar</b> (nome de guerra), <b>Item</b>, <b>Valor</b>, <b>Quantidade</b> (opcional), <b>Pago na hora</b> (Sim/Não), <b>Observações</b> (opcional).
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Os itens são categorizados automaticamente conforme os produtos cadastrados (ex.: "coca" ou "fanta" viram <b>Refrigerante</b>).
             </p>
             <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
               <div className="flex items-center gap-3">
