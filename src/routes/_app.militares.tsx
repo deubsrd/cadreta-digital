@@ -13,6 +13,7 @@ import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Upload, Download, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { onlyDigits, formatBrazilPhone, isValidBrazilPhone } from "@/lib/format";
+import { POSTOS, POSTO_DESCRICAO, normalizePosto } from "@/lib/postos";
 import * as XLSX from "xlsx";
 
 export const Route = createFileRoute("/_app/militares")({
@@ -146,7 +147,7 @@ function MilitarDialog({ open, setOpen, editing, onSaved }: { open: boolean; set
     setBusy(true);
     try {
       // A normalização final (+55 DD NNNNNNNNN) é feita dentro de upsertMilitar → api.ts.
-      await upsertMilitar({ id: editing?.id, posto: posto.trim().toUpperCase(), nome_guerra: nomeGuerra.trim(), telefone: telefone.trim(), ativo });
+      await upsertMilitar({ id: editing?.id, posto: normalizePosto(posto), nome_guerra: nomeGuerra.trim(), telefone: telefone.trim(), ativo });
       toast.success(editing ? "Atualizado" : "Cadastrado");
       onSaved(); setOpen(false); reset();
     } catch (e: any) { toast.error(e.message); }
@@ -161,7 +162,21 @@ function MilitarDialog({ open, setOpen, editing, onSaved }: { open: boolean; set
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-[1fr_2fr] gap-3">
-            <div><Label>Posto/Graduação</Label><Input required placeholder="3º SGT" value={posto} onChange={(e) => setPosto(e.target.value)} /></div>
+            <div>
+              <Label>Posto/Graduação</Label>
+              <Input required list="postos-list" placeholder="SD ou SD EV" value={posto} onChange={(e) => setPosto(e.target.value)} />
+              <datalist id="postos-list">
+                {POSTOS.map((p) => (
+                  <option key={p} value={p}>{POSTO_DESCRICAO[p] ?? p}</option>
+                ))}
+              </datalist>
+              {posto && (
+                <p className="text-xs mt-1 text-muted-foreground">
+                  Será salvo como: <span className="font-medium">{normalizePosto(posto)}</span>
+                  {POSTO_DESCRICAO[normalizePosto(posto)] ? ` (${POSTO_DESCRICAO[normalizePosto(posto)]})` : ""}
+                </p>
+              )}
+            </div>
             <div><Label>Nome de guerra</Label><Input required placeholder="Albuquerque" value={nomeGuerra} onChange={(e) => setNomeGuerra(e.target.value)} /></div>
           </div>
           <div>
@@ -246,7 +261,7 @@ function ImportDialog({ open, setOpen, existing, onDone }: { open: boolean; setO
     setBusy(true);
     try {
       await bulkInsertMilitares(valid.map((r) => ({
-        posto: r.posto.trim().toUpperCase(),
+        posto: normalizePosto(r.posto),
         nome_guerra: r.nome_guerra.trim(),
         // formatBrazilPhone é chamado aqui para garantir formato canônico na importação.
         // O campo já passou pela validação em validate(), então o resultado nunca é null aqui.
@@ -280,6 +295,11 @@ function ImportDialog({ open, setOpen, existing, onDone }: { open: boolean; setO
               <Badge>{valid.length} válidos</Badge>
               {invalid.length > 0 && <Badge variant="destructive">{invalid.length} com erro</Badge>}
             </div>
+            <datalist id="postos-list-import">
+              {POSTOS.map((p) => (
+                <option key={p} value={p}>{POSTO_DESCRICAO[p] ?? p}</option>
+              ))}
+            </datalist>
             <div className="max-h-[50vh] overflow-auto border rounded-md">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 sticky top-0">
@@ -293,7 +313,10 @@ function ImportDialog({ open, setOpen, existing, onDone }: { open: boolean; setO
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={i} className={`border-t ${r._error ? "bg-destructive/5" : ""}`}>
-                      <td className="px-2 py-1"><Input className="h-8" value={r.posto} onChange={(e) => updateRow(i, { posto: e.target.value })} /></td>
+                      <td className="px-2 py-1">
+                        <Input className="h-8" list="postos-list-import" value={r.posto} onChange={(e) => updateRow(i, { posto: e.target.value })} />
+                        {r.posto && <div className="text-xs text-muted-foreground mt-1">→ {normalizePosto(r.posto)}</div>}
+                      </td>
                       <td className="px-2 py-1"><Input className="h-8" value={r.nome_guerra} onChange={(e) => updateRow(i, { nome_guerra: e.target.value })} /></td>
                       <td className="px-2 py-1">
                         <Input className="h-8" value={r.telefone} onChange={(e) => updateRow(i, { telefone: e.target.value })} />

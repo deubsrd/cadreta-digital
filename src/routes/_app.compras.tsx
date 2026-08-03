@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listCompras, listMilitares, listPagamentos, listItens, createComprasBulk, updateCompra, deleteCompra, militarLabel, type Compra, type Militar, type Item } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { brl, ymd, startOfMonth, endOfMonth } from "@/lib/format";
+import { POSTOS, POSTO_DESCRICAO, normalizePosto } from "@/lib/postos";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -551,10 +552,11 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
       let militar_id = r.militar_id;
 
       if (!militar_id && r.militar_nome) {
-        // Se a planilha trouxe o posto/graduação, restringe os candidatos a esse posto
-        const nPosto = normalize(r.posto ?? "");
-        const candidatos = nPosto ? militares.filter((m) => normalize(m.posto) === nPosto) : militares;
-        const pool = candidatos.length ? candidatos : militares;
+        // Se a planilha trouxe o posto/graduação, restringe os candidatos a esse posto.
+        // SD (Efetivo Profissional) e SD EV (Efetivo Variável) são graduações distintas.
+        const nPosto = normalizePosto(r.posto ?? "");
+        const candidatos = nPosto ? militares.filter((m) => normalizePosto(m.posto) === nPosto) : militares;
+        const pool = candidatos.length ? candidatos : (nPosto ? [] : militares);
         const match = findBestMatch(r.militar_nome, pool);
         if (match) {
           if (match.exact || match.score >= FUZZY_AUTO) {
@@ -728,7 +730,13 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
                   {rows.map((r, i) => (
                     <tr key={i} className={`border-t ${r._error ? "bg-destructive/5" : ""}`}>
                       <td className="px-2 py-1"><Input className="h-8" type="date" value={r.data_compra} onChange={(e) => updateRow(i, { data_compra: e.target.value })} /></td>
-                      <td className="px-2 py-1"><Input className="h-8" placeholder="Ex.: SD" value={r.posto} onChange={(e) => updateRow(i, { posto: e.target.value })} /></td>
+                      <td className="px-2 py-1">
+                        <Input className="h-8" list="postos-list-compras" placeholder="Ex.: SD ou SD EV" value={r.posto} onChange={(e) => updateRow(i, { posto: e.target.value })} />
+                        {r.posto && <div className="text-xs text-muted-foreground mt-1">→ {normalizePosto(r.posto)}</div>}
+                        <datalist id="postos-list-compras">
+                          {POSTOS.map((p) => (<option key={p} value={p}>{POSTO_DESCRICAO[p] ?? p}</option>))}
+                        </datalist>
+                      </td>
                       <td className="px-2 py-1">
                         <Input className="h-8" value={r.militar_nome} onChange={(e) => updateRow(i, { militar_nome: e.target.value })} />
                         {r._error && r._suggestion && (
