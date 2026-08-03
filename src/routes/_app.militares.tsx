@@ -234,7 +234,9 @@ function ImportDialog({ open, setOpen, existing, onDone }: { open: boolean; setO
     const wb = XLSX.read(buf);
     const ws = wb.Sheets[wb.SheetNames[0]];
     const json = XLSX.utils.sheet_to_json<any>(ws, { defval: "" });
-    const norm = (k: string) => k.toLowerCase().replace(/[^a-z]/g, "");
+    // Remove acentos antes de limpar: "Posto/Graduação" → "postograduacao"
+    const norm = (k: string) =>
+      k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z]/g, "");
     const parsed: Row[] = json.map((r) => {
       const entries = Object.entries(r).map(([k, v]) => [norm(k), String(v ?? "").trim()] as const);
       const get = (...keys: string[]) => entries.find(([k]) => keys.includes(k))?.[1] ?? "";
