@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listCompras, listMilitares, listPagamentos, listItens, createComprasBulk, updateCompra, deleteCompra, militarLabel, type Compra, type Militar, type Item } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { brl, ymd, startOfMonth, endOfMonth } from "@/lib/format";
+import { POSTOS, POSTO_DESCRICAO, normalizePosto } from "@/lib/postos";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
