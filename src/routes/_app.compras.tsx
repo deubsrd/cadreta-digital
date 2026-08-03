@@ -551,15 +551,31 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
       let militar_id = r.militar_id;
 
       if (!militar_id && r.militar_nome) {
-        const match = findBestMatch(r.militar_nome, militares);
+        // Se a planilha trouxe o posto/graduação, restringe os candidatos a esse posto
+        const nPosto = normalize(r.posto ?? "");
+        const candidatos = nPosto ? militares.filter((m) => normalize(m.posto) === nPosto) : militares;
+        const pool = candidatos.length ? candidatos : militares;
+        const match = findBestMatch(r.militar_nome, pool);
         if (match) {
           if (match.exact || match.score >= FUZZY_AUTO) {
-            // Match automático — aplica silenciosamente
             militar_id = match.militar.id;
           } else if (match.score >= FUZZY_SUGGEST) {
-            // Match provável — sugere ao usuário
             _suggestion = { militar: match.militar, score: match.score };
           }
+        }
+      }
+
+      // Categorização automática do item conforme os itens cadastrados
+      let item_id = r.item_id;
+      let itens = r.itens;
+      let _itemMatch = r._itemMatch ?? null;
+      const textoItem = r._itemOriginal ?? r.itens;
+      if (!item_id && textoItem) {
+        const im = findBestItem(textoItem, itensCadastrados);
+        if (im && im.score >= 0.85) {
+          item_id = im.item.id;
+          itens = im.item.nome;
+          _itemMatch = { nome: im.item.nome, categoria: im.item.categoria };
         }
       }
 
@@ -568,10 +584,10 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
       if (!dataParaValidar || !/^\d{4}-\d{2}-\d{2}$/.test(dataParaValidar)) _error = "Data inválida";
       else if (!militar_id && !_suggestion) _error = `Militar não encontrado: ${r.militar_nome || "(vazio)"}`;
       else if (_suggestion && !militar_id) _error = `Confirme o militar: ${_suggestion.militar.nome_guerra} (${Math.round(_suggestion.score * 100)}% similar)`;
-      else if (!r.itens?.trim()) _error = "Item vazio";
+      else if (!itens?.trim()) _error = "Item vazio";
       else if (!r.valor || isNaN(valorNum) || valorNum <= 0) _error = "Valor inválido";
-      else if (r.item_id && !UUID_RE.test(r.item_id)) _error = "item_id inválido";
-      return { ...r, militar_id, _error, _suggestion };
+      else if (item_id && !UUID_RE.test(item_id)) _error = "item_id inválido";
+      return { ...r, militar_id, itens, item_id, _itemOriginal: textoItem, _itemMatch, _error, _suggestion };
     });
   };
 
@@ -588,20 +604,24 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
       const valorRaw = get("valor", "preco", "preço", "total");
       const qtdRaw = get("quantidade", "qtd");
       const itemIdRaw = String(get("itemid") ?? "").trim();
+      const itemTexto = String(get("item", "produto", "descricao", "descrição", "itens") ?? "").trim();
       return {
         data_compra: parseDateCell(dataRaw),
+        posto: String(get("posto", "postograd", "postogaduacao", "postograduacao", "postogradua", "graduacao", "graduação", "patente") ?? "").trim(),
         militar_nome: String(get("militar", "nomedeguerra", "nomeguerra", "nome") ?? "").trim(),
         militar_id: "",
-        itens: String(get("item", "produto", "descricao", "descrição", "itens") ?? "").trim(),
+        itens: itemTexto,
         valor: parseValor(valorRaw),
         quantidade: qtdRaw === "" || qtdRaw === null || qtdRaw === undefined ? "1" : String(qtdRaw),
         pago_na_hora: parseBool(get("pagonahora", "pago")),
         observacoes: String(get("observacoes", "observações", "obs") ?? "").trim(),
         item_id: itemIdRaw || undefined,
+        _itemOriginal: itemTexto,
       };
     });
     setRows(validate(parsed));
   };
+
 
   const updateRow = (i: number, patch: Partial<ImpRow>) => {
     setRows((rs) => validate(rs.map((r, idx) => (idx === i ? { ...r, ...patch, militar_id: patch.militar_nome !== undefined ? "" : r.militar_id } : r))));
