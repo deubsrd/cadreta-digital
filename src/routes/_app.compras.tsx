@@ -730,7 +730,13 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
                   {rows.map((r, i) => (
                     <tr key={i} className={`border-t ${r._error ? "bg-destructive/5" : ""}`}>
                       <td className="px-2 py-1"><Input className="h-8" type="date" value={r.data_compra} onChange={(e) => updateRow(i, { data_compra: e.target.value })} /></td>
-                      <td className="px-2 py-1"><Input className="h-8" placeholder="Ex.: SD" value={r.posto} onChange={(e) => updateRow(i, { posto: e.target.value })} /></td>
+                      <td className="px-2 py-1">
+                        <Input className="h-8" list="postos-list-compras" placeholder="Ex.: SD ou SD EV" value={r.posto} onChange={(e) => updateRow(i, { posto: e.target.value })} />
+                        {r.posto && <div className="text-xs text-muted-foreground mt-1">→ {normalizePosto(r.posto)}</div>}
+                        <datalist id="postos-list-compras">
+                          {POSTOS.map((p) => (<option key={p} value={p}>{POSTO_DESCRICAO[p] ?? p}</option>))}
+                        </datalist>
+                      </td>
                       <td className="px-2 py-1">
                         <Input className="h-8" value={r.militar_nome} onChange={(e) => updateRow(i, { militar_nome: e.target.value })} />
                         {r._error && r._suggestion && (
