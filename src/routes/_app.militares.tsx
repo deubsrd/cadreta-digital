@@ -13,6 +13,7 @@ import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Upload, Download, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { onlyDigits, formatBrazilPhone, isValidBrazilPhone } from "@/lib/format";
+import { POSTOS, POSTO_DESCRICAO, normalizePosto } from "@/lib/postos";
 import * as XLSX from "xlsx";
 
 export const Route = createFileRoute("/_app/militares")({
@@ -161,7 +162,21 @@ function MilitarDialog({ open, setOpen, editing, onSaved }: { open: boolean; set
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-[1fr_2fr] gap-3">
-            <div><Label>Posto/Graduação</Label><Input required placeholder="3º SGT" value={posto} onChange={(e) => setPosto(e.target.value)} /></div>
+            <div>
+              <Label>Posto/Graduação</Label>
+              <Input required list="postos-list" placeholder="SD ou SD EV" value={posto} onChange={(e) => setPosto(e.target.value)} />
+              <datalist id="postos-list">
+                {POSTOS.map((p) => (
+                  <option key={p} value={p}>{POSTO_DESCRICAO[p] ?? p}</option>
+                ))}
+              </datalist>
+              {posto && (
+                <p className="text-xs mt-1 text-muted-foreground">
+                  Será salvo como: <span className="font-medium">{normalizePosto(posto)}</span>
+                  {POSTO_DESCRICAO[normalizePosto(posto)] ? ` (${POSTO_DESCRICAO[normalizePosto(posto)]})` : ""}
+                </p>
+              )}
+            </div>
             <div><Label>Nome de guerra</Label><Input required placeholder="Albuquerque" value={nomeGuerra} onChange={(e) => setNomeGuerra(e.target.value)} /></div>
           </div>
           <div>
