@@ -857,17 +857,13 @@ function LancamentoRapidoDialog({ open, setOpen, militares, itens, onDone }: {
       setLancamentos((ls) => [...ls, { militar: militarAtivo, item: itemSel, valor, qtd, pago_na_hora: pagoNaHora }]);
     }
 
-    // Vai pro próximo militar automaticamente
-    const idx = militaresFiltrados.findIndex((m) => m.id === militarAtivo.id);
-    const proximo = militaresFiltrados[idx + 1];
-    if (proximo) {
-      selecionarMilitar(proximo);
-    } else {
-      setMilitarAtivo(null);
-      setItemSel(null);
-      setValorSel("");
-      setTimeout(() => buscaRef.current?.focus(), 50);
-    }
+    // Volta para a busca para digitar o próximo militar
+    setMilitarAtivo(null);
+    setItemSel(null);
+    setValorSel("");
+    setQtdSel("1");
+    setBusca("");
+    setTimeout(() => buscaRef.current?.select(), 50);
   };
 
   const removerLancamento = (idx: number) =>
