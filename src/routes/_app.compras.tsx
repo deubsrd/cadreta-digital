@@ -155,6 +155,7 @@ function ComprasPage() {
 
       <PdvDialog open={open} setOpen={setOpen} editing={editing} militares={militares} itens={itens} compras={compras} pagamentos={pagamentos} onSaved={() => { qc.invalidateQueries({ queryKey: ["compras", uid] }); qc.invalidateQueries({ queryKey: ["pagamentos", uid] }); }} />
       <ImportComprasDialog open={importOpen} setOpen={setImportOpen} militares={militares} itensCadastrados={itens} onDone={() => qc.invalidateQueries({ queryKey: ["compras", uid] })} />
+      <LancamentoRapidoDialog open={lancRapidoOpen} setOpen={setLancRapidoOpen} militares={militares} itens={itens} onDone={() => qc.invalidateQueries({ queryKey: ["compras", uid] })} />
     </div>
   );
 }
