@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Pencil, Trash2, Search, FileDown, Check, ChevronsUpDown, X, Wallet, Clock, Upload, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, FileDown, Check, ChevronsUpDown, X, Wallet, Clock, Upload, AlertTriangle, Zap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,7 @@ function ComprasPage() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [lancRapidoOpen, setLancRapidoOpen] = useState(false);
   const [editing, setEditing] = useState<Compra | null>(null);
 
   const range = useMemo(() => {
@@ -84,6 +85,7 @@ function ComprasPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportXlsx}><FileDown className="h-4 w-4 mr-2" />Excel</Button>
           <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4 mr-2" />Importar planilha</Button>
+          <Button variant="outline" onClick={() => setLancRapidoOpen(true)}><Zap className="h-4 w-4 mr-2" />Lançamento rápido</Button>
           <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4 mr-2" />Nova venda</Button>
         </div>
       </div>
@@ -779,6 +781,283 @@ function ImportComprasDialog({ open, setOpen, militares, itensCadastrados, onDon
           <Button variant="ghost" onClick={() => { setOpen(false); setRows([]); }}>Cancelar</Button>
           <Button onClick={confirmar} disabled={busy || !valid.length}>{busy ? "Importando..." : `Importar ${valid.length}`}</Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Lançamento Rápido ───────────────────────────────────────────────────────
+
+function LancamentoRapidoDialog({ open, setOpen, militares, itens, onDone }: {
+  open: boolean; setOpen: (b: boolean) => void;
+  militares: Militar[]; itens: Item[]; onDone: () => void;
+}) {
+  const today = ymd(new Date());
+  const [data, setData] = useState(today);
+  const [busca, setBusca] = useState("");
+  const [lancamentos, setLancamentos] = useState<{ militar: Militar; item: Item; valor: number; qtd: number; pago_na_hora: boolean }[]>([]);
+  const [militarAtivo, setMilitarAtivo] = useState<Militar | null>(null);
+  const [itemSel, setItemSel] = useState<Item | null>(null);
+  const [valorSel, setValorSel] = useState("");
+  const [qtdSel, setQtdSel] = useState("1");
+  const [pagoNaHora, setPagoNaHora] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const valorRef = useRef<HTMLInputElement>(null);
+  const buscaRef = useRef<HTMLInputElement>(null);
+
+  const militaresFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return militares
+      .filter((m) => m.ativo)
+      .filter((m) => !q || m.nome_guerra.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q) ||
+        m.posto.toLowerCase().includes(q))
+      .sort((a, b) => a.nome_guerra.localeCompare(b.nome_guerra));
+  }, [militares, busca]);
+
+  // Militares que já têm lançamento nesta sessão
+  const militaresComLancamento = useMemo(() =>
+    new Set(lancamentos.map((l) => l.militar.id)), [lancamentos]);
+
+  const selecionarMilitar = (m: Militar) => {
+    setMilitarAtivo(m);
+    setItemSel(null);
+    setValorSel("");
+    setQtdSel("1");
+    setPagoNaHora(false);
+  };
+
+  const selecionarItem = (item: Item) => {
+    setItemSel(item);
+    setValorSel(pagoNaHora
+      ? String(item.preco_avista ?? item.preco_fiado ?? "")
+      : String(item.preco_fiado ?? item.preco_avista ?? ""));
+    setTimeout(() => valorRef.current?.focus(), 50);
+  };
+
+  useEffect(() => {
+    if (itemSel) {
+      setValorSel(pagoNaHora
+        ? String(itemSel.preco_avista ?? itemSel.preco_fiado ?? "")
+        : String(itemSel.preco_fiado ?? itemSel.preco_avista ?? ""));
+    }
+  }, [pagoNaHora]);
+
+  const adicionarLancamento = () => {
+    if (!militarAtivo || !itemSel) return;
+    const valor = parseFloat(valorSel);
+    if (!valor || valor <= 0) return toast.error("Valor inválido");
+    const qtd = Math.max(1, parseInt(qtdSel) || 1);
+
+    // Se já tem lançamento deste militar+item, atualiza
+    const existeIdx = lancamentos.findIndex((l) => l.militar.id === militarAtivo.id && l.item.id === itemSel.id && l.pago_na_hora === pagoNaHora);
+    if (existeIdx >= 0) {
+      setLancamentos((ls) => ls.map((l, i) => i === existeIdx ? { ...l, qtd: l.qtd + qtd, valor } : l));
+    } else {
+      setLancamentos((ls) => [...ls, { militar: militarAtivo, item: itemSel, valor, qtd, pago_na_hora: pagoNaHora }]);
+    }
+
+    // Vai pro próximo militar automaticamente
+    const idx = militaresFiltrados.findIndex((m) => m.id === militarAtivo.id);
+    const proximo = militaresFiltrados[idx + 1];
+    if (proximo) {
+      selecionarMilitar(proximo);
+    } else {
+      setMilitarAtivo(null);
+      setItemSel(null);
+      setValorSel("");
+      setTimeout(() => buscaRef.current?.focus(), 50);
+    }
+  };
+
+  const removerLancamento = (idx: number) =>
+    setLancamentos((ls) => ls.filter((_, i) => i !== idx));
+
+  const totalLancamentos = lancamentos.reduce((s, l) => s + l.valor * l.qtd, 0);
+
+  const confirmar = async () => {
+    if (!lancamentos.length) return;
+    setBusy(true);
+    try {
+      await createComprasBulk(lancamentos.map((l) => ({
+        militar_id: l.militar.id,
+        data_compra: data,
+        itens: l.item.nome,
+        item_id: l.item.id,
+        valor: l.valor * l.qtd,
+        quantidade: l.qtd,
+        pago_na_hora: l.pago_na_hora,
+        observacoes: null,
+      })));
+      toast.success(`${lancamentos.length} lançamento(s) salvos`);
+      setLancamentos([]);
+      setMilitarAtivo(null);
+      setItemSel(null);
+      setBusca("");
+      onDone();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const resetar = () => {
+    setLancamentos([]);
+    setMilitarAtivo(null);
+    setItemSel(null);
+    setValorSel("");
+    setBusca("");
+    setData(today);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetar(); }}>
+      <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-5 py-4 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-3">
+            <Zap className="h-5 w-5 text-primary" />
+            Lançamento rápido
+            <div className="flex items-center gap-2 ml-auto">
+              <Label className="text-sm font-normal text-muted-foreground">Data:</Label>
+              <Input type="date" value={data} onChange={(e) => setData(e.target.value)} className="h-8 w-36 text-sm" />
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex flex-1 min-h-0">
+          {/* ── Lista de militares ── */}
+          <div className="w-56 border-r flex flex-col shrink-0">
+            <div className="p-2 border-b">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <Input
+                  ref={buscaRef}
+                  placeholder="Buscar..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="h-7 pl-7 text-xs"
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {militaresFiltrados.map((m) => {
+                const temLanc = militaresComLancamento.has(m.id);
+                const ativo = militarAtivo?.id === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => selecionarMilitar(m)}
+                    className={`w-full text-left px-3 py-2 text-xs border-b flex items-center justify-between gap-1 transition-colors
+                      ${ativo ? "bg-primary text-primary-foreground" : "hover:bg-muted/60"}
+                      ${temLanc && !ativo ? "opacity-60" : ""}`}
+                  >
+                    <span className="truncate">{militarLabel(m)}</span>
+                    {temLanc && <Check className="h-3 w-3 shrink-0 text-success" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Painel central: item + valor ── */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {!militarAtivo ? (
+              <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+                Selecione um militar à esquerda
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col p-4 gap-4">
+                <div className="font-semibold text-lg">{militarLabel(militarAtivo)}</div>
+
+                {/* Itens em grade */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 overflow-y-auto flex-1">
+                  {itens.filter((i) => i.ativo).map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => selecionarItem(item)}
+                      className={`rounded-lg border p-3 text-left transition-all hover:border-primary
+                        ${itemSel?.id === item.id ? "border-primary bg-primary/5 ring-1 ring-primary" : ""}`}
+                    >
+                      <div className="font-medium text-sm truncate">{item.nome}</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {item.preco_fiado ? `Fiado: ${brl(item.preco_fiado)}` : ""}
+                        {item.preco_avista ? ` · À vista: ${brl(item.preco_avista)}` : ""}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Valor + botão */}
+                {itemSel && (
+                  <div className="border-t pt-3 flex gap-3 items-end flex-wrap">
+                    <div>
+                      <Label className="text-xs">Quantidade</Label>
+                      <Input
+                        type="number" min={1} value={qtdSel}
+                        onChange={(e) => setQtdSel(e.target.value)}
+                        className="h-9 w-20 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Valor (R$)</Label>
+                      <Input
+                        ref={valorRef}
+                        type="number" step="0.01" min={0}
+                        value={valorSel}
+                        onChange={(e) => setValorSel(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && adicionarLancamento()}
+                        className="h-9 w-28 text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pb-1">
+                      <Switch id="pago-hora" checked={pagoNaHora} onCheckedChange={setPagoNaHora} />
+                      <Label htmlFor="pago-hora" className="text-xs cursor-pointer">Pago na hora</Label>
+                    </div>
+                    <Button onClick={adicionarLancamento} className="h-9">
+                      <Check className="h-4 w-4 mr-1" />
+                      Adicionar · Enter
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Resumo lateral ── */}
+          <div className="w-56 border-l flex flex-col shrink-0">
+            <div className="px-3 py-2 border-b flex items-center justify-between">
+              <span className="text-xs font-medium uppercase text-muted-foreground">Resumo</span>
+              <Badge variant="secondary">{lancamentos.length}</Badge>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {lancamentos.length === 0 ? (
+                <div className="text-xs text-muted-foreground text-center p-4">Nenhum lançamento ainda</div>
+              ) : (
+                lancamentos.map((l, i) => (
+                  <div key={i} className="px-3 py-2 border-b text-xs flex justify-between gap-1 group">
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{l.militar.nome_guerra}</div>
+                      <div className="text-muted-foreground">{l.item.nome} ×{l.qtd}</div>
+                      <div className={l.pago_na_hora ? "text-success" : "text-destructive"}>
+                        {brl(l.valor * l.qtd)} {l.pago_na_hora ? "· à vista" : "· fiado"}
+                      </div>
+                    </div>
+                    <button onClick={() => removerLancamento(i)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="p-3 border-t space-y-2">
+              <div className="flex justify-between text-sm font-semibold">
+                <span>Total</span>
+                <span>{brl(totalLancamentos)}</span>
+              </div>
+              <Button className="w-full h-9" disabled={!lancamentos.length || busy} onClick={confirmar}>
+                {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+                Salvar tudo
+              </Button>
+            </div>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
