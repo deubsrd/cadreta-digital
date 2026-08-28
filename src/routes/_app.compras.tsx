@@ -873,6 +873,53 @@ function LancamentoRapidoDialog({ open, setOpen, militares, itens, onDone }: {
   const removerLancamento = (idx: number) =>
     setLancamentos((ls) => ls.filter((_, i) => i !== idx));
 
+  const itensAtivos = useMemo(() => itens.filter((i) => i.ativo), [itens]);
+
+  // Atalhos de teclado: 1-9 selecionam/incrementam item, Enter adiciona
+  useEffect(() => {
+    if (!open || !militarAtivo) return;
+    const handler = (e: KeyboardEvent) => {
+      // Ignora se o foco está em input de texto/busca
+      const tag = (e.target as HTMLElement)?.tagName;
+      const tipo = (e.target as HTMLInputElement)?.type;
+      if (tag === "INPUT" && (tipo === "text" || tipo === "search")) return;
+
+      const num = parseInt(e.key);
+      if (!isNaN(num) && num >= 1 && num <= 9) {
+        const item = itensAtivos[num - 1];
+        if (!item) return;
+        e.preventDefault();
+        if (itemSel?.id === item.id) {
+          // Já selecionado: incrementa quantidade
+          setQtdSel((q) => String((parseInt(q) || 1) + 1));
+        } else {
+          // Seleciona item e define qtd = 1
+          setItemSel(item);
+          setQtdSel("1");
+          setValorSel(pagoNaHora
+            ? String(item.preco_avista ?? item.preco_fiado ?? "")
+            : String(item.preco_fiado ?? item.preco_avista ?? ""));
+        }
+        return;
+      }
+
+      if (e.key === "Enter" && itemSel) {
+        e.preventDefault();
+        adicionarLancamento();
+      }
+
+      // Escape: deseleciona item
+      if (e.key === "Escape" && itemSel) {
+        e.preventDefault();
+        setItemSel(null);
+        setValorSel("");
+        setQtdSel("1");
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, militarAtivo, itemSel, itensAtivos, pagoNaHora, adicionarLancamento]);
+
   const totalLancamentos = lancamentos.reduce((s, l) => s + l.valor * l.qtd, 0);
 
   const confirmar = async () => {
@@ -967,29 +1014,50 @@ function LancamentoRapidoDialog({ open, setOpen, militares, itens, onDone }: {
               <div className="flex-1 flex flex-col p-4 gap-4">
                 <div className="font-semibold text-lg">{militarLabel(militarAtivo)}</div>
 
-                {/* Itens em grade */}
+                {/* Itens em grade com atalhos de teclado */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 overflow-y-auto flex-1">
-                  {itens.filter((i) => i.ativo).map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => selecionarItem(item)}
-                      className={`rounded-lg border p-3 text-left transition-all hover:border-primary
-                        ${itemSel?.id === item.id ? "border-primary bg-primary/5 ring-1 ring-primary" : ""}`}
-                    >
-                      <div className="font-medium text-sm truncate">{item.nome}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {item.preco_fiado ? `Fiado: ${brl(item.preco_fiado)}` : ""}
-                        {item.preco_avista ? ` · À vista: ${brl(item.preco_avista)}` : ""}
-                      </div>
-                    </button>
-                  ))}
+                  {itensAtivos.map((item, idx) => {
+                    const atalho = idx < 9 ? String(idx + 1) : null;
+                    const selecionado = itemSel?.id === item.id;
+                    const qtdAtual = selecionado ? parseInt(qtdSel) || 1 : 0;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          if (selecionado) {
+                            setQtdSel((q) => String((parseInt(q) || 1) + 1));
+                          } else {
+                            selecionarItem(item);
+                            setQtdSel("1");
+                          }
+                        }}
+                        className={`rounded-lg border p-3 text-left transition-all hover:border-primary relative
+                          ${selecionado ? "border-primary bg-primary/5 ring-2 ring-primary" : ""}`}
+                      >
+                        {atalho && (
+                          <span className={`absolute top-1.5 right-1.5 h-5 w-5 rounded text-xs flex items-center justify-center font-bold
+                            ${selecionado ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                            {atalho}
+                          </span>
+                        )}
+                        <div className="font-medium text-sm truncate pr-6">{item.nome}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {item.preco_fiado ? `Fiado: ${brl(item.preco_fiado)}` : ""}
+                          {item.preco_avista ? ` · À vista: ${brl(item.preco_avista)}` : ""}
+                        </div>
+                        {selecionado && qtdAtual > 1 && (
+                          <div className="mt-1 text-xs font-semibold text-primary">{qtdAtual}× selecionado</div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Valor + botão */}
                 {itemSel && (
                   <div className="border-t pt-3 flex gap-3 items-end flex-wrap">
                     <div>
-                      <Label className="text-xs">Quantidade</Label>
+                      <Label className="text-xs">Qtd (tecle o número do item)</Label>
                       <Input
                         type="number" min={1} value={qtdSel}
                         onChange={(e) => setQtdSel(e.target.value)}
@@ -1013,7 +1081,8 @@ function LancamentoRapidoDialog({ open, setOpen, militares, itens, onDone }: {
                     </div>
                     <Button onClick={adicionarLancamento} className="h-9">
                       <Check className="h-4 w-4 mr-1" />
-                      Adicionar · Enter
+                      Adicionar
+                      <kbd className="ml-2 text-xs opacity-70 bg-primary-foreground/20 px-1 rounded">↵</kbd>
                     </Button>
                   </div>
                 )}
