@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMemo, useState } from "react";
-import { CheckCircle2, MessageCircle, MessageCircleMore, RotateCcw, FileDown, Copy, Search, X, ChevronDown, ChevronUp, Eraser } from "lucide-react";
+import { CheckCircle2, MessageCircle, MessageCircleMore, RotateCcw, FileDown, Copy, Search, X, ChevronDown, ChevronUp, Eraser, Loader2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -118,16 +118,25 @@ function FaturasPage() {
     queryFn: () => listCompras({ from: range.from, to: range.to }),
     staleTime: 0, refetchOnMount: true, enabled: !modoHistorico,
   });
-  const { data: comprasTodas = [] } = useQuery({
+  const { data: comprasTodas = [], isLoading: loadingTodas } = useQuery({
     queryKey: ["compras_todas", uid],
     queryFn: () => listCompras(),
-    staleTime: 0, enabled: modoHistorico,
+    staleTime: 0,
+    refetchOnMount: true,
+    enabled: modoHistorico,
   });
   const compras = modoHistorico ? comprasTodas : comprasMes;
   const { data: pagamentos = [] } = useQuery({ queryKey: ["pagamentos", uid], queryFn: listPagamentos, staleTime: 0, refetchOnMount: true });
   const { data: config } = useQuery({ queryKey: ["config", uid], queryFn: getConfig, staleTime: 0 });
 
-  // ── Modo mês ─────────────────────────────────────────────────────────────
+  // Pré-carrega todas as compras em background assim que a página abre
+  // para que o modo histórico responda instantaneamente
+  const { isLoading: loadingHistorico } = useQuery({
+    queryKey: ["compras_todas", uid],
+    queryFn: () => listCompras(),
+    staleTime: 60_000, // cache por 1 min
+    enabled: !!uid,
+  });
   const faturasMes = useMemo(() => {
     if (modoHistorico) return [];
     const map = new Map<string, { total: number; itens: string[] }>();
@@ -412,7 +421,13 @@ function FaturasPage() {
       {/* ── MODO HISTÓRICO ── */}
       {modoHistorico && (
         <div className="grid gap-4">
-          {historicoMilitar.length === 0 && <Card className="p-8 text-center text-muted-foreground">Nenhum militar encontrado com esse nome.</Card>}
+          {loadingHistorico && (
+            <Card className="p-8 text-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+              Carregando histórico completo...
+            </Card>
+          )}
+          {!loadingHistorico && historicoMilitar.length === 0 && <Card className="p-8 text-center text-muted-foreground">Nenhum militar encontrado com esse nome.</Card>}
           {historicoMilitar.map((r) => (
             <Card key={r.militar.id} className="p-4">
               <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
